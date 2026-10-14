@@ -1,15 +1,21 @@
 # Plot
 
-`zgui-plot` provides backend-neutral 2D plotting primitives, retained Zgui chart components, SVG/PNG export, and optional docking workspace controls. It contains no AFLR or ULog dependencies.
+`zgui-plot` provides backend-neutral 2D plotting primitives, retained Zgui chart components, SVG/PNG export, and optional docking workspace controls.
 
-The crate lives in its own repository at `C:\dev\zgui-plot`; AFLR Analyzer consumes it as a sibling path dependency. Zgui is consumed from its [public Git repository](https://github.com/zortax/zgui) at a pinned revision. Zgui currently documents Git installation and is not published on crates.io, so this dependency blocks publishing `zgui-plot` to crates.io. A public repository URL remains to be set.
+The crate lives in the [Quick-Flash/zgui-plot repository](https://github.com/Quick-Flash/zgui-plot). Zgui is consumed from its [public Git repository](https://github.com/zortax/zgui) at a pinned revision. Zgui currently documents Git installation and is not published on crates.io, so this dependency blocks publishing `zgui-plot` to crates.io.
 
 ## Add the crate
 
-While developing in the Analyzer workspace, use this path from workspace root:
+While developing in a workspace, use this path from workspace root:
 
 ```toml
 zgui-plot = { path = "../zgui-plot", features = ["workspace", "raster"] }
+```
+
+For consumers outside this workspace, use the public Git source:
+
+```toml
+zgui-plot = { git = "https://github.com/Quick-Flash/zgui-plot", features = ["workspace", "raster"] }
 ```
 
 The `zgui-plot` package imports as `zgui_plot`. Use `default-features = false` to keep Zgui, docking controls, and raster export out of backend-neutral applications.
@@ -23,7 +29,7 @@ The `zgui-plot` package imports as `zgui_plot`. Use `default-features = false` t
 | `raster` | PNG rendering from SVG |
 | `workspace` | `zgui` plus `zgui-ui` docking tabs, pane host, splitters, settings and signal drag/drop |
 
-For native UI consumers, disable default features and enable `workspace` and optional `raster` on the dependency entry. Add standalone Git source after public repository is created. Zgui must resolve to same revision as `zgui-plot`.
+For native UI consumers, disable default features and enable `workspace` and optional `raster` on the dependency entry. Use the public Git source above for external consumers. Zgui must resolve to same revision as `zgui-plot`.
 
 Use same Zgui revision as this crate. Install `zgui_workspace::stylesheet()` and `zgui_surface::stylesheet()` alongside application styles, inside a `zgui-ui` theme.
 
@@ -73,7 +79,7 @@ Prepare `ScatterSeries` from arbitrary-order XY samples, then validate IDs with 
 
 `PlotAnnotation` supplies X/Y thresholds, bands, rectangular regions, and fit lines. Consumer supplies values, labels, colors, widths, and dash choice. Paths and painting live in `zgui_plot::annotations`; screen and SVG use same layers. Annotation eligibility and meaning belong to consumer.
 
-`zgui_plot::theme` owns shared tick/legend CSS and export descriptions. `view_state::ViewState<T>` supplies persistent per-kind viewport/settings/source identity for custom adapters. AFLR consumes these APIs plus shared scatter submission and histogram backdrop layers; its flight grouping, dates, thresholds, review diagnostics, and specialized adapter UI remain application code.
+`zgui_plot::theme` owns shared tick/legend CSS and export descriptions. `view_state::ViewState<T>` supplies persistent per-kind viewport/settings/source identity for custom adapters. Consumers can combine these APIs with shared scatter submission and histogram backdrop layers while keeping domain-specific grouping, dates, thresholds, diagnostics, and specialized UI in application code.
 
 Standalone consumer demo:
 
@@ -92,8 +98,8 @@ Capture uses measured positions, active tabs only, and current ranges. Empty pan
 ## Application responsibilities and remaining work
 
 - ULog ingestion, topic/instance/field discovery, timestamp conversion, and signal metadata belong in consumer.
-- AFLR flight filters, dates, firmware groups, thresholds, and correlation actions remain in AFLR adapter.
-- Generic time/scatter/histogram plots, state, styling, annotations, settings, and exports live in library. AFLR adapters retain application-specific data and UI decisions.
+- Domain-specific filters, dates, groups, thresholds, and correlation actions remain in the consuming application.
+- Generic time/scatter/histogram plots, state, styling, annotations, settings, and exports live in this library. Consumers retain application-specific data and UI decisions.
 - Linked record selection remains TODO. Current links share bounds and data coordinates, not sample/flight identity.
 - Workspace serialization/persistence remains TODO.
 

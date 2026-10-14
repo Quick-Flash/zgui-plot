@@ -1,4 +1,4 @@
-//! Standalone reusable plot consumer. No AFLR data or UI dependencies.
+//! Standalone reusable plot consumer.
 //! cargo run --release -p zgui-plot --example time_series --features workspace
 use zgui::prelude::*;
 use zgui_plot::PlotPoint;

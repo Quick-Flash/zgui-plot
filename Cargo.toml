@@ -6,6 +6,7 @@ authors = ["Kevin Plaizier <kevin.plaizier@tealdrones.com>"]
 description = "Reusable 2D plotting, retained Zgui rendering, exports, and docking workspace controls"
 license = "MIT OR BSD-3-Clause"
 readme = "README.md"
+repository = "https://github.com/Quick-Flash/zgui-plot"
 keywords = ["plotting", "visualization", "zgui", "charts", "docking"]
 categories = ["graphics", "gui"]
 include = ["Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-BSD-3-Clause", "src/**", "examples/**"]
