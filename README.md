@@ -4,7 +4,7 @@ Built for **Enlumi**, whose name comes from Esperanto, meaning **to enlighten**.
 
 `zgui-plot` provides backend-neutral 2D plotting primitives, retained Zgui chart components, SVG/PNG export, and optional docking workspace controls.
 
-The crate lives in the [Quick-Flash/zgui-plot repository](https://github.com/Quick-Flash/zgui-plot). Zgui is consumed from its [public Git repository](https://github.com/zortax/zgui) at a pinned revision. Zgui currently documents Git installation and is not published on crates.io, so this dependency blocks publishing `zgui-plot` to crates.io.
+The crate lives in the [Quick-Flash/zgui-plot repository](https://github.com/Quick-Flash/zgui-plot). Zgui temporarily pins a public commit from [Quick-Flash/zgui, branch `text-multiclick-selection`](https://github.com/Quick-Flash/zgui/tree/text-multiclick-selection), pending upstream merge. Consumers must use the same Zgui revision recorded in `Cargo.toml`. Zgui currently documents Git installation and is not published on crates.io, so this dependency blocks publishing `zgui-plot` to crates.io.
 
 ## Add the crate
 
