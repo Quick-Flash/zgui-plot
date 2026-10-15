@@ -66,12 +66,29 @@ impl PlotPointer {
         let hint = self
             .controller
             .with_value(|controller| controller.hint(pointer, geometry, select));
-        self.hint.set(hint);
+        if self.hint.get_untracked() != hint {
+            self.hint.set(hint);
+        }
     }
 
     /// The pointer left the plot.
     pub fn leave(&self) {
         self.hint.set(None);
+    }
+
+    /// Axis under pointer, using the same zones as axis dragging.
+    pub fn axis_at(
+        &self,
+        pointer: (f64, f64),
+        geometry: PlotGeometry,
+    ) -> Option<crate::labels::Axis> {
+        self.controller.with_value(
+            |controller| match controller.hint(pointer, geometry, false) {
+                Some(Gesture::XEdge(_)) => Some(crate::labels::Axis::X),
+                Some(Gesture::YEdge(_)) => Some(crate::labels::Axis::Y),
+                _ => None,
+            },
+        )
     }
 
     /// Start a drag; returns what it grabbed, or `None` outside every zone.

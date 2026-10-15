@@ -91,7 +91,13 @@ pub fn push_selection(
 ) {
     let mut path = BezPath::new();
     crate::append_rect(&mut path, x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1));
-    push_fill_stroke(scene, path, fill, stroke, 1.0);
+    // Drag geometry changes every frame; solid paints churn CPU atlas masks.
+    scene.push(
+        ShapeBuilder::new(path)
+            .fill(flat(fill))
+            .stroke(flat(stroke), 1.0)
+            .build(),
+    );
 }
 
 /// Fill `path` with a flat colour that stays on the GPU vector route.
@@ -319,13 +325,14 @@ mod tests {
         push_gpu_fill(&mut scene, square(), color);
         push_selection(&mut scene, ((0.0, 3.0), (0.0, 3.0)), color, color);
         assert_eq!(scene.shapes().len(), 4);
-        for index in [0, 1, 3] {
+        for index in [0, 1] {
             assert!(matches!(
                 scene.shapes()[index].fill.as_ref().unwrap().paint,
                 zgui::canvas::Paint::Solid(_)
             ));
         }
         assert!(is_flat_gradient(&scene.shapes()[2]));
+        assert!(is_flat_gradient(&scene.shapes()[3]));
         let mut strokes = CanvasScene::default();
         push_stroke(&mut strokes, square(), color, 1.0);
         push_dashed_stroke(&mut strokes, square(), color, 1.0);
@@ -333,6 +340,37 @@ mod tests {
         for shape in strokes.shapes() {
             let stroke = shape.stroke.as_ref().expect("stroked");
             assert!(matches!(stroke.paint, zgui::canvas::Paint::Solid(_)));
+        }
+    }
+
+    #[test]
+    fn zoom_box_avoids_cpu_masks_at_every_drag_size() {
+        let fill = Color::srgb_u8(119, 185, 232, 40);
+        let stroke = Color::srgb_u8(119, 185, 232, 255);
+        for extent in [3.0, 128.0, 256.0, 512.0, 1200.0] {
+            let mut scene = CanvasScene::default();
+            push_selection(&mut scene, ((extent, 0.0), (extent, 0.0)), fill, stroke);
+            assert_eq!(scene.shapes().len(), 1);
+            let shape = &scene.shapes()[0];
+            let mut expected = BezPath::new();
+            crate::append_rect(&mut expected, 0.0, 0.0, extent, extent);
+            assert_eq!(shape.path.as_ref(), &expected);
+            for (paint, color) in [
+                (&shape.fill.as_ref().unwrap().paint, fill),
+                (&shape.stroke.as_ref().unwrap().paint, stroke),
+            ] {
+                let zgui::canvas::Paint::Gradient(gradient) = paint else {
+                    panic!("Changing zoom boxes must not create CPU atlas masks");
+                };
+                assert_eq!(gradient.stops.len(), 2);
+                assert!(
+                    gradient
+                        .stops
+                        .iter()
+                        .all(|stop| stop.color == zgui::canvas::Ink::Solid(color))
+                );
+            }
+            assert_eq!(shape.stroke.as_ref().unwrap().style.width, 1.0);
         }
     }
 

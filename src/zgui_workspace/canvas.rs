@@ -13,6 +13,68 @@ pub struct WorkspaceGeometry {
     pub layout: RwSignal<Layout, LocalStorage>,
 }
 impl WorkspaceGeometry {
+    /// Fit all dock geometry into viewport, including windows smaller than pane minimums.
+    pub fn fitted(
+        layout: RwSignal<Layout, LocalStorage>,
+        maximized: RwSignal<Option<u64>, LocalStorage>,
+    ) -> Self {
+        let grid = NodeRef::new();
+        let bounds = grid.observe_border_box();
+        let size = Signal::derive_local(move || {
+            let size = bounds.get().map(|bounds| bounds.size).unwrap_or_default();
+            (
+                f64::from(size.width.0 / grid.scale()),
+                f64::from(size.height.0 / grid.scale()),
+            )
+        });
+        let panes = Signal::derive_local(move || {
+            let (width, height) = size.get();
+            let mut plots = Vec::new();
+            let mut dividers = Vec::new();
+            if let Some(id) = maximized.get() {
+                plots.push((
+                    id,
+                    Rect {
+                        width,
+                        height,
+                        ..Rect::default()
+                    },
+                ));
+            } else {
+                let layout = layout.get();
+                let minimum = layout.minimum();
+                let canvas = Rect {
+                    width: width.max(minimum.0).max(1.0),
+                    height: height.max(minimum.1).max(1.0),
+                    ..Rect::default()
+                };
+                layout.geometry(canvas, &mut plots, &mut dividers);
+                // Keep shared docking ratios and minimums, then fit geometry to visible viewport.
+                let (sx, sy) = (width / canvas.width, height / canvas.height);
+                let fit = |rect: &mut Rect| {
+                    rect.x *= sx;
+                    rect.y *= sy;
+                    rect.width *= sx;
+                    rect.height *= sy;
+                };
+                for (_, rect) in &mut plots {
+                    fit(rect);
+                }
+                for divider in &mut dividers {
+                    fit(&mut divider.rect);
+                    divider.span *= if divider.stacked { sy } else { sx };
+                }
+            }
+            (plots, dividers)
+        });
+        WorkspaceGeometry {
+            grid,
+            size,
+            panes,
+            layout,
+        }
+    }
+
     pub fn new(
         layout: RwSignal<Layout, LocalStorage>,
         maximized: RwSignal<Option<u64>, LocalStorage>,

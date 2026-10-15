@@ -6,6 +6,7 @@ mod render;
 mod scatter;
 mod state;
 pub mod theme;
+mod time_lines;
 pub mod view_state;
 pub use histogram::*;
 pub use plot::*;

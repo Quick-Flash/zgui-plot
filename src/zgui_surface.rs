@@ -79,12 +79,16 @@ pub fn PlotSurface(
     on_update: UnsyncCallback<RangeUpdate>,
     /// Double click: return to the full view.
     on_reset: UnsyncCallback<()>,
+    /// Double-click on an axis handle: fit only that axis. Without callback,
+    /// axis double-clicks fall back to `on_reset`.
+    #[prop(optional)]
+    on_fit_axis: Option<UnsyncCallback<Axis>>,
     on_hover: UnsyncCallback<PlotHover>,
     /// Called on every primary press before a gesture starts; return `true`
     /// to consume the press (for example a pending export click).
     #[prop(optional)]
     on_press: Option<UnsyncCallback<(f64, f64), bool>>,
-    /// Escape during a drag: restore these starting ranges. Without it,
+    /// Escape or pointer cancellation during a drag: restore starting ranges. Without it,
     /// Escape is not handled.
     #[prop(optional)]
     on_cancel: Option<UnsyncCallback<Ranges>>,
@@ -104,9 +108,23 @@ pub fn PlotSurface(
     legend_ref: Option<NodeRef>,
     /// Background colour of the plot box.
     background: String,
+    #[prop(default = true)] show_pointer: bool,
+    #[prop(default = true)] show_cursor_values: bool,
     /// Canvases, legend and other overlays, back to front.
     children: Children,
 ) -> impl IntoView {
+    let reset_at = move |position: Option<(f64, f64)>| {
+        if let Some(axis) = position.and_then(|position| {
+            geometry
+                .run(())
+                .and_then(|geometry| pointer.axis_at(position, geometry))
+        }) && let Some(on_fit_axis) = on_fit_axis
+        {
+            on_fit_axis.run(axis);
+        } else {
+            on_reset.run(());
+        }
+    };
     let links = use_local_context::<PlotLinks>();
     if let Some(links) = links {
         links.bind(ranges, on_update);
@@ -156,6 +174,7 @@ pub fn PlotSurface(
                 1.0,
             );
         });
+    let linked_canvas = show_pointer.then_some(linked_canvas.into_view());
     let input = NodeRef::new();
     let surface_bounds = node_ref.observe_border_box();
     let legend_bounds = legend_ref.map(|node| node.observe_border_box());
@@ -302,11 +321,13 @@ pub fn PlotSurface(
                     {move || title.map(|title| title.get()).unwrap_or_default()}
                 }
             }
+            if move || show_cursor_values {
             text(class = "plot-cursor-values", style = Some(cursor_style.css()),
                 style:left = move || cursor_values().map(|(_, left, _, _)| format!("{left}px")),
                 style:top = move || cursor_values().map(|(_, _, top, _)| format!("{top}px")),
                 style:width = move || cursor_values().map(|(_, _, _, width)| format!("{width}px"))) {
                 {move || cursor_values().map(|(text, _, _, _)| text).unwrap_or_default()}
+            }
             }
             box(class = "plot-input", node_ref = input, tabindex = Focus::Sequential, a11y:label = label,
                 style:cursor = cursor,
@@ -375,7 +396,7 @@ pub fn PlotSurface(
                     flush();
                     if let Some(geometry) = geometry.run(()) {
                         match pointer.release(ev.modifiers.shift(), geometry) {
-                            Release::DoubleClick => on_reset.run(()),
+                            Release::DoubleClick => reset_at(local_position(&node_ref, ev.position)),
                             Release::Zoom(update) => on_update.run(update),
                             _ => {}
                         }
@@ -385,12 +406,13 @@ pub fn PlotSurface(
                 on:pointer_cancel = move |ev| {
                     cursor_position.set(None);
                     frame.set_value(None); pending.set_value(None); wheeled.set_value(None);
-                    pointer.cancel(); pointer.leave();
+                    if let Some(initial) = pointer.cancel() && let Some(on_cancel) = on_cancel { on_cancel.run(initial); }
+                    pointer.leave();
                     on_hover.run(PlotHover::Left);
                     ev.release_pointer();
                 },
                 on:pointer_leave = move |_| { cursor_position.set(None); pointer.leave(); on_hover.run(PlotHover::Left); },
-                on:double_click = move |_| { cursor_position.set(None); on_reset.run(()); },
+                on:double_click = move |ev| { cursor_position.set(None); reset_at(local_position(&node_ref, ev.position)); },
                 on:wheel = move |ev| {
                     let factor = wheel_factor(&ev.delta);
                     if factor == 1.0 { return; }

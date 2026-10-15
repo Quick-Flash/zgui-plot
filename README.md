@@ -1,5 +1,7 @@
 # Plot
 
+Built for **Enlumi**, whose name comes from Esperanto, meaning **to enlighten**.
+
 `zgui-plot` provides backend-neutral 2D plotting primitives, retained Zgui chart components, SVG/PNG export, and optional docking workspace controls.
 
 The crate lives in the [Quick-Flash/zgui-plot repository](https://github.com/Quick-Flash/zgui-plot). Zgui is consumed from its [public Git repository](https://github.com/zortax/zgui) at a pinned revision. Zgui currently documents Git installation and is not published on crates.io, so this dependency blocks publishing `zgui-plot` to crates.io.
@@ -19,6 +21,43 @@ zgui-plot = { git = "https://github.com/Quick-Flash/zgui-plot", features = ["wor
 ```
 
 The `zgui-plot` package imports as `zgui_plot`. Use `default-features = false` to keep Zgui, docking controls, and raster export out of backend-neutral applications.
+
+## Editable series plots
+
+With `workspace`, `zgui_series::SeriesPlot` adds compact editable legends,
+Ctrl/Shift multi-selection, fixed-layout appearance settings, disabled color
+controls for multiple selections, hidden-line hover previews, legend reorder,
+cross-pane drag feedback, and snapped linked pointers/readouts.
+
+`SeriesPane::new(id, lines)` owns durable presentation over
+`Signal<Vec<SeriesLine>>`; line IDs are stable numeric IDs, while source metadata
+stays in consumer. `LegendHost` supplies visible panes, hit testing, and acceptance
+callbacks. `SeriesActions` supplies select/remove/move callbacks and optional extra
+action label/help/callback; Enlumi uses this hook for **Add filters**. Keep this
+state under a durable owner, outside transient dialogs. The controls install their
+own stylesheet; applications still install surface/time-series sheets and a
+zgui-ui `ThemeProvider`.
+
+`TimeSeriesPlot::line_drawing` maps ordinary string series IDs to
+`line_draw::LineDraw { connection, markers }`. `Connection` supports `Linear`,
+`Pre`, and `Post`. Standard time plots now use bounded background preparation,
+including column reduction before step expansion/markers, one worker per plot,
+compatible completion publishing during continuous pans, and a viewport of cached
+data on either side. Full samples remain available for hover and filtering.
+Snapshots use the same prepared canvas, preserving interpolation and markers.
+`show_legend`, `show_pointer`, and `show_cursor_values` provide explicit composition
+controls; consumers no longer need CSS selectors against internal child order.
+
+Backend-neutral helpers are `line_draw::prepare`, `series_samples::{viewport,
+pan_viewport, Accuracy}`, and `palette::{DEFAULT_PALETTE, next_color}`. Palette
+allocation takes destination and global colors, so each application chooses its
+reuse scope. `SeriesPane::copy_appearance` preserves styles/visibility and resolves
+destination color clashes before membership transfer; consumer performs transfer
+and source cleanup explicitly.
+
+Workspace helpers include `WorkspaceGeometry::fitted` for viewport-sized docks,
+`Layout::equalize` for balanced rows/columns, and `PlotLinksMenu` with independent
+checkboxes plus All. Group docking and pane-local guides remain available.
 
 ## Features
 
@@ -112,3 +151,26 @@ cargo run --release -p zgui-plot --example waves --features zgui
 ## License
 
 Licensed under either MIT or BSD 3-Clause, at your option. See `LICENSE-MIT` and `LICENSE-BSD-3-Clause`.
+
+## Axis fit and pointer controls
+
+Time, scatter, and histogram plots share full-height Y grab band inside the
+left edge. Upper half adjusts Y maximum; lower half adjusts Y minimum.
+Bottom X band adjusts the nearer X bound. Wheel over an axis zooms only that axis
+around the value under the pointer; the other axis stays unchanged.
+Shift still selects a zoom box;
+Escape cancels a drag. Axis double-click fits only that axis; data-area
+double-click fits both. Manual fits are one-shot and disable continuous auto-fit.
+`PlotState::fit_to` and `fit_data` still explicitly enable continuous auto-fit.
+
+With `workspace`, these plots include a right-click menu for **Fit X axis**,
+**Fit Y axis**, and **Fit both axes**. The menu uses the active zgui-ui theme.
+Pure `zgui` builds retain dragging and axis double-click without pulling in
+zgui-ui. Custom surfaces can compose `zgui_workspace::PlotFitMenu` directly.
+
+`PlotState::fit_axes(&PlotData, Axes)` and `fit_axis(&PlotData, Axis)` preserve
+unselected axes and ignore hidden series; empty or entirely hidden data leaves
+the view unchanged. `PlotSurface::on_fit_axis` exposes axis-aware double-click
+to custom consumers; omitting it retains full-reset fallback. `HitZones` exposes
+`y_axis_width`; `y_min_handle = false` uses the whole bottom band for X bounds.
+Right-clicking a legend entry does not toggle it.

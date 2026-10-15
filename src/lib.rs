@@ -58,11 +58,16 @@ pub mod histogram_layers;
 mod hit;
 pub mod interaction;
 pub mod labels;
+pub mod line_draw;
 pub mod overlay;
+pub mod palette;
 mod path;
 pub mod plot_data;
 pub mod range;
+pub mod series_samples;
 pub mod time_series;
+#[cfg(feature = "workspace")]
+pub mod zgui_series;
 
 #[cfg(feature = "zgui")]
 pub mod zgui_plot;

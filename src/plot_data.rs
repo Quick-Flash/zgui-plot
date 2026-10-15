@@ -2,6 +2,9 @@
 use crate::{PlotPoint, Range, Ranges, time_series::TimeSeriesSet};
 use std::{collections::BTreeSet, sync::Arc};
 
+#[path = "plot_data/fit.rs"]
+mod fit;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MarkerShape {
     Circle,
@@ -30,12 +33,7 @@ impl SeriesStyle {
         let hash = id.bytes().fold(2166136261_u32, |hash, byte| {
             (hash ^ u32::from(byte)).wrapping_mul(16777619)
         });
-        let palette = [
-            [117, 197, 139, 255],
-            [119, 185, 232, 255],
-            [238, 190, 96, 255],
-            [237, 145, 134, 255],
-        ];
+        let palette = crate::palette::DEFAULT_PALETTE;
         Self {
             color: palette[hash as usize % palette.len()],
             width: 1.5,

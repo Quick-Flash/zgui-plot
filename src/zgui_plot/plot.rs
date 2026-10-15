@@ -41,8 +41,28 @@ pub fn DataPlot(
     draw_series: Signal<bool, LocalStorage>,
     #[prop(optional)] format: Option<UnsyncCallback<(Axis, f64), String>>,
     #[prop(optional)] snapshot: Option<PlotSnapshotSource>,
+    /// Optional shared line editor action exposed in grid context menu.
+    #[prop(optional)]
+    on_line_settings: Option<UnsyncCallback<()>>,
+    #[prop(default = Signal::derive_local(|| true))] line_settings_enabled: Signal<
+        bool,
+        LocalStorage,
+    >,
+    /// Per-series interpolation and sample-marker visibility for time plots.
+    #[prop(default = Signal::stored_local(std::collections::BTreeMap::new()))]
+    line_drawing: Signal<
+        std::collections::BTreeMap<String, crate::line_draw::LineDraw>,
+        LocalStorage,
+    >,
+    /// Public composition controls for custom legends/readouts; no child-selector CSS needed.
+    #[prop(default = true)]
+    show_legend: bool,
+    #[prop(default = true)] show_pointer: bool,
+    #[prop(default = true)] show_cursor_values: bool,
     #[prop(attrs)] attrs: Attrs,
 ) -> impl IntoView {
+    #[cfg(not(feature = "workspace"))]
+    let _ = (on_line_settings, line_settings_enabled);
     let surface = NodeRef::new();
     let legend = NodeRef::new();
     let size = surface.observe_content_size();
@@ -108,7 +128,13 @@ pub fn DataPlot(
             ticks
         })
     });
-    let pointer = PlotPointer::new(HitZones::default(), Axes::BOTH);
+    let pointer = PlotPointer::new(
+        HitZones {
+            y_min_handle: false,
+            ..HitZones::default()
+        },
+        Axes::BOTH,
+    );
     let fit_before_drag = StoredValue::new_local(state.auto_fit.get_untracked());
     let cursor = RwSignal::new_local(None::<(f64, f64)>);
     redraw_on_change(move || {
@@ -190,6 +216,9 @@ pub fn DataPlot(
             return;
         }
         let current = series.get();
+        if matches!(current, PlotData::Time(_)) {
+            return;
+        }
         let histogram = matches!(current, PlotData::Histogram(_));
         let geometry = if histogram { geometry.get() } else { None };
         lines_draw.draw(|scene| {
@@ -197,6 +226,19 @@ pub fn DataPlot(
             render::draw_data(scene, &current, state, geometry, &distribution.get());
         });
     });
+    super::time_lines::time_lines(
+        Signal::derive_local(move || match series.get() {
+            PlotData::Time(set) => set,
+            _ => crate::time_series::TimeSeriesSet::default(),
+        }),
+        state,
+        line_drawing,
+        geometry,
+        Signal::derive_local(move || {
+            visible.get() && draw_series.get() && matches!(series.get(), PlotData::Time(_))
+        }),
+        lines.clone(),
+    );
     let lines_view = lines.clone();
     redraw_on_change(move || {
         if !visible.get() {
@@ -331,9 +373,15 @@ pub fn DataPlot(
     }
     let on_hover = UnsyncCallback::new(move |event| {
         let PlotHover::At(position) = event else {
-            cursor.set(None);
-            state.hover.set(None);
-            state.bin_hover.set(None);
+            if cursor.get_untracked().is_some() {
+                cursor.set(None);
+            }
+            if state.hover.get_untracked().is_some() {
+                state.hover.set(None);
+            }
+            if state.bin_hover.get_untracked().is_some() {
+                state.bin_hover.set(None);
+            }
             return;
         };
         cursor.set(Some(position));
@@ -349,22 +397,23 @@ pub fn DataPlot(
         let hit = render::hover(&current, state, target, geometry);
         state.hover.set(hit);
     });
-    view! {
-        column(class = "time-series-host", {..attrs}) {
+    let plot = view! {
             PlotSurface(node_ref = surface, class = "time-series-plot", label = "Interactive data plot".into(),
                 pointer = pointer, geometry = UnsyncCallback::new(move |()| geometry.get()),
                 ranges = UnsyncCallback::new(move |()| state.ranges.get()),
                 on_update = UnsyncCallback::new(move |update| { state.apply(update); cursor.set(None); }),
-                on_reset = UnsyncCallback::new(move |()| { state.fit_data(&series.get_untracked()); cursor.set(None); pointer.cancel(); }),
+                on_reset = UnsyncCallback::new(move |()| { state.fit_axes(&series.get_untracked(), Axes::BOTH); cursor.set(None); pointer.cancel(); }),
+                on_fit_axis = UnsyncCallback::new(move |axis| { state.fit_axes_with_drawing(&series.get_untracked(), Axes { x: axis == Axis::X, y: axis == Axis::Y }, &line_drawing.get_untracked()); cursor.set(None); pointer.cancel(); }),
                 on_press = UnsyncCallback::new(move |_| { fit_before_drag.set_value(state.auto_fit.get_untracked()); false }),
                 on_cancel = UnsyncCallback::new(move |initial| { state.ranges.set(initial); state.auto_fit.set(fit_before_drag.get_value()); }),
-                on_hover = on_hover, ticks = ticks, title = title, legend_ref = legend,
+                on_hover = on_hover, ticks = ticks, title = title, legend_ref = legend, show_pointer = show_pointer, show_cursor_values = show_cursor_values,
                 cursor_format = UnsyncCallback::new(move |(x, y)| if matches!(series.get(), PlotData::Histogram(_)) { format!("X: {}", format_value(Axis::X, x)) } else { format!("X: {} | Y: {}", format_value(Axis::X, x), format_value(Axis::Y, y)) }),
                 background = BACKGROUND.to_owned()) {
                 {zgui::elements::canvas().class("time-series-layer").scene(&grid)}
                 {zgui::elements::canvas().class("time-series-layer").scene(&annotation_handle)}
                 {zgui::elements::canvas().class("time-series-layer").scene(&lines)}
-                {zgui::elements::canvas().class("time-series-layer").scene(&overlay)}
+                {zgui::elements::canvas().class("time-series-layer plot-hover-layer").scene(&overlay)}
+                if move || show_legend {
                 column(class = "plot-legend", node_ref = legend,
                     style:right = move || geometry.get().map(|geometry| format!("{}px", geometry.width - geometry.right + 6.0))) {
                     for label in move || series.get().labels(), key = |label| (label.id().to_owned(), label.label().to_owned()) {
@@ -385,7 +434,17 @@ pub fn DataPlot(
                         }
                     }
                 }
+                }
+            }
+    };
+    #[cfg(feature = "workspace")]
+    let plot = {
+        use crate::zgui_workspace::PlotFitMenuProps;
+        view! {
+            PlotFitMenu(on_line_settings = on_line_settings, line_settings_enabled = line_settings_enabled, on_fit = UnsyncCallback::new(move |axes| { state.fit_axes_with_drawing(&series.get_untracked(), axes, &line_drawing.get_untracked()); cursor.set(None); pointer.cancel(); })) {
+                {plot.into_view()}
             }
         }
-    }
+    };
+    view! { column(class = "time-series-host", {..attrs}) { {plot.into_view()} } }
 }

@@ -2,6 +2,7 @@
 //! Install `stylesheet()` alongside plot surface styles and a zgui-ui theme.
 mod canvas;
 mod divider;
+mod fit_menu;
 mod group;
 mod group_guide;
 mod group_overlay;
@@ -10,6 +11,7 @@ mod links;
 mod menu;
 mod overlay;
 mod pane;
+mod plot_links;
 mod preview_pane;
 mod proposal;
 mod series_source;
@@ -24,6 +26,7 @@ use crate::workspace::{
 };
 pub use canvas::*;
 pub use divider::*;
+pub use fit_menu::*;
 pub use group::*;
 pub use group_guide::*;
 pub use group_overlay::*;
@@ -32,6 +35,7 @@ pub use links::*;
 pub use menu::*;
 pub use overlay::*;
 pub use pane::*;
+pub use plot_links::*;
 pub use preview_pane::*;
 pub use series_source::*;
 pub use settings::*;

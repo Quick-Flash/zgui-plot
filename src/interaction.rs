@@ -55,11 +55,9 @@ pub struct HitZones {
     pub x_edge: f64,
     /// Band around the bottom edge holding the X edge handles: (above, below).
     pub bottom_band: (f64, f64),
-    /// Half-height of the band around the top edge that grabs the Y maximum.
-    pub top_band: f64,
-    /// How far the top band reaches left of the data area, over Y labels.
-    pub top_band_left: f64,
-    /// Whether the bottom band between the X handles grabs the Y minimum.
+    /// Width of the Y-axis band inside the left data edge.
+    pub y_axis_width: f64,
+    /// Whether bottom band between X handles grabs Y minimum instead of X bound.
     pub y_min_handle: bool,
 }
 
@@ -68,8 +66,7 @@ impl Default for HitZones {
         Self {
             x_edge: 38.0,
             bottom_band: (16.0, 18.0),
-            top_band: 32.0,
-            top_band_left: 86.0,
+            y_axis_width: 56.0,
             y_min_handle: true,
         }
     }
@@ -96,13 +93,26 @@ pub fn hit_test(
         if (x - geometry.right).abs() <= zones.x_edge {
             return Some(Gesture::XEdge(Edge::Max));
         }
-        if zones.y_min_handle && in_x {
-            return Some(Gesture::YEdge(Edge::Min));
+        if in_x {
+            return Some(if zones.y_min_handle {
+                Gesture::YEdge(Edge::Min)
+            } else {
+                Gesture::XEdge(if x < (geometry.left + geometry.right) / 2.0 {
+                    Edge::Min
+                } else {
+                    Edge::Max
+                })
+            });
         }
     }
-    let top = geometry.top - zones.top_band..=geometry.top + zones.top_band;
-    if (geometry.left - zones.top_band_left..=geometry.right).contains(&x) && top.contains(&y) {
-        return Some(Gesture::YEdge(Edge::Max));
+    if in_data && x - geometry.left <= zones.y_axis_width {
+        return Some(Gesture::YEdge(
+            if y < (geometry.top + geometry.bottom) / 2.0 {
+                Edge::Max
+            } else {
+                Edge::Min
+            },
+        ));
     }
     in_data.then_some(Gesture::Pan)
 }
@@ -179,8 +189,8 @@ pub fn box_zoom(
 }
 
 /// Ranges after a wheel step of `factor` at `pointer` over `gesture`'s zone.
-/// The pointer stays fixed; a Y handle keeps the opposite Y end fixed, and X
-/// handles leave Y alone. Y follows the pointer only where `axes.y`.
+/// The value under the pointer stays fixed. Axis bands zoom only that axis;
+/// the data area zooms the axes enabled by `axes`.
 pub fn wheel_zoom(
     initial: impl Into<Ranges>,
     pointer: (f64, f64),
@@ -194,10 +204,9 @@ pub fn wheel_zoom(
     let y_anchor = ((geometry.bottom - pointer.1) / geometry.data_height()).clamp(0.0, 1.0);
     let zoom_x = |range: Range| range::zoom(range, x_anchor, factor);
     Some(match gesture {
-        Gesture::YEdge(edge) => Ranges {
+        Gesture::YEdge(_) => Ranges {
             x: initial.x,
-            // The grabbed end moves; the opposite end stays put.
-            y: range::zoom(initial.y, if edge == Edge::Max { 0.0 } else { 1.0 }, factor)?,
+            y: range::zoom(initial.y, y_anchor, factor)?,
         },
         Gesture::XEdge(_) => Ranges {
             x: zoom_x(initial.x)?,
@@ -451,7 +460,7 @@ mod tests {
         assert_eq!(hit(0.0, 300.0, false), Some(Gesture::XEdge(Edge::Min)));
         assert_eq!(hit(490.0, 300.0, false), Some(Gesture::XEdge(Edge::Max)));
         assert_eq!(hit(200.0, 300.0, false), Some(Gesture::YEdge(Edge::Min)));
-        assert_eq!(hit(200.0, 4.0, false), Some(Gesture::YEdge(Edge::Max)));
+        assert_eq!(hit(200.0, 4.0, false), Some(Gesture::Pan));
         assert_eq!(hit(200.0, 150.0, false), Some(Gesture::Pan));
         assert_eq!(hit(0.0, 300.0, true), Some(Gesture::Select));
         assert_eq!(hit(-1.0, 150.0, false), None);
@@ -461,6 +470,31 @@ mod tests {
         };
         assert_eq!(
             hit_test((200.0, 300.0), geometry(), &no_y_min, false),
+            Some(Gesture::XEdge(Edge::Min))
+        );
+    }
+
+    #[test]
+    fn axis_bands_only_cover_left_and_bottom_and_shift_keeps_box_zoom() {
+        let zones = HitZones::default();
+        assert_eq!(
+            hit_test((10.0, 110.0), geometry(), &zones, false),
+            Some(Gesture::YEdge(Edge::Max))
+        );
+        assert_eq!(
+            hit_test((480.0, 220.0), geometry(), &zones, false),
+            Some(Gesture::Pan)
+        );
+        assert_eq!(
+            hit_test((10.0, 110.0), geometry(), &zones, true),
+            Some(Gesture::Select)
+        );
+        let disabled = HitZones {
+            y_axis_width: 0.0,
+            ..zones
+        };
+        assert_eq!(
+            hit_test((10.0, 110.0), geometry(), &disabled, false),
             Some(Gesture::Pan)
         );
     }
@@ -574,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn wheel_keeps_the_grabbed_context_fixed() {
+    fn wheel_keeps_the_pointer_value_fixed() {
         let initial = ((0.0, 10.0), (0.0, 10.0));
         let zoom = |pointer, gesture, axes| {
             wheel_zoom(initial, pointer, 2.0, gesture, geometry(), axes).unwrap()
@@ -587,10 +621,10 @@ mod tests {
         let top = zoom((200.0, 4.0), Gesture::YEdge(Edge::Max), Axes::BOTH);
         assert_eq!(
             (top.x, top.y),
-            (Range::new(0.0, 10.0), Range::new(0.0, 20.0))
+            (Range::new(0.0, 10.0), Range::new(-10.0, 10.0))
         );
         let bottom = zoom((200.0, 300.0), Gesture::YEdge(Edge::Min), Axes::BOTH);
-        assert_eq!(bottom.y, Range::new(-10.0, 10.0));
+        assert_eq!(bottom.y, Range::new(0.0, 20.0));
         let edge = zoom((490.0, 300.0), Gesture::XEdge(Edge::Max), Axes::BOTH);
         assert_eq!(
             (edge.x, edge.y),
@@ -598,6 +632,80 @@ mod tests {
         );
         let x_only = zoom((0.0, 150.0), Gesture::Pan, Axes::X_ONLY);
         assert_eq!(x_only.y, Range::new(0.0, 10.0));
+    }
+
+    #[test]
+    fn axis_wheel_preserves_mouse_anchor_and_other_axis() {
+        let geometry = geometry();
+        let initial = Ranges::new((10.0, 30.0), (-20.0, 60.0));
+        let mut controller = Controller::new(
+            HitZones {
+                y_min_handle: false,
+                ..HitZones::default()
+            },
+            Axes::BOTH,
+        );
+        for (point, x_axis) in [
+            ((122.5, 308.0), true),
+            ((367.5, 308.0), true),
+            ((10.0, 78.0), false),
+            ((10.0, 226.0), false),
+        ] {
+            for factor in [0.5, 2.0] {
+                let update = controller.wheel(point, factor, geometry, initial).unwrap();
+                let zoomed = update.apply(initial);
+                if x_axis {
+                    assert_eq!(update.y, None);
+                    assert_eq!(zoomed.y, initial.y);
+                    assert!(
+                        (geometry.x_value(point.0, zoomed.x)
+                            - geometry.x_value(point.0, initial.x))
+                        .abs()
+                            < 1e-9
+                    );
+                    assert!((zoomed.x.span() - initial.x.span() * factor).abs() < 1e-9);
+                } else {
+                    assert_eq!(update.x, None);
+                    assert_eq!(zoomed.x, initial.x);
+                    assert!(
+                        (geometry.y_value(point.1, zoomed.y)
+                            - geometry.y_value(point.1, initial.y))
+                        .abs()
+                            < 1e-9
+                    );
+                    assert!((zoomed.y.span() - initial.y.span() * factor).abs() < 1e-9);
+                }
+                let restored = controller
+                    .wheel(point, 1.0 / factor, geometry, zoomed)
+                    .unwrap()
+                    .apply(zoomed);
+                assert!((restored.x.min - initial.x.min).abs() < 1e-9);
+                assert!((restored.x.max - initial.x.max).abs() < 1e-9);
+                assert!((restored.y.min - initial.y.min).abs() < 1e-9);
+                assert!((restored.y.max - initial.y.max).abs() < 1e-9);
+            }
+        }
+    }
+
+    #[test]
+    fn top_and_right_wheel_zoom_both_axes_around_pointer() {
+        let geometry = geometry();
+        let initial = Ranges::new((10.0, 30.0), (-20.0, 60.0));
+        let mut controller = Controller::new(HitZones::default(), Axes::BOTH);
+        for point in [(200.0, 4.0), (480.0, 220.0)] {
+            assert_eq!(controller.hint(point, geometry, false), Some(Gesture::Pan));
+            let update = controller.wheel(point, 0.5, geometry, initial).unwrap();
+            assert!(update.x.is_some() && update.y.is_some());
+            let zoomed = update.apply(initial);
+            assert!(
+                (geometry.x_value(point.0, zoomed.x) - geometry.x_value(point.0, initial.x)).abs()
+                    < 1e-9
+            );
+            assert!(
+                (geometry.y_value(point.1, zoomed.y) - geometry.y_value(point.1, initial.y)).abs()
+                    < 1e-9
+            );
+        }
     }
 
     #[test]
@@ -672,9 +780,9 @@ mod tests {
         let mut controller = Controller::new(HitZones::default(), Axes::BOTH);
         let ranges = ((0.0, 10.0), (0.0, 10.0));
         let update = controller
-            .wheel((200.0, 4.0), 2.0, geometry(), ranges)
+            .wheel((10.0, 78.0), 2.0, geometry(), ranges)
             .unwrap();
-        assert_eq!((update.x, update.y), (None, Some(Range::new(0.0, 20.0))));
+        assert_eq!((update.x, update.y), (None, Some(Range::new(-7.5, 12.5))));
         assert_eq!(
             controller.wheel((-50.0, 150.0), 2.0, geometry(), ranges),
             None

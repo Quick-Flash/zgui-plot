@@ -65,7 +65,7 @@ pub fn LegendItem<K: Clone + PartialEq + 'static>(
             style:color = move || Some(color_signal.map_or_else(|| color.clone(), |color| color.get())),
             on:pointer_enter = move |_| if let Some(hovered) = hovered { hovered.set(Some(key.clone())); },
             on:pointer_leave = move |_| if let Some(hovered) = hovered { hovered.set(None); },
-            on:pointer_down = move |ev| { on_toggle.run(()); ev.stop_propagation(); },
+            on:pointer_down = move |ev| { if ev.button == Some(PointerButton::Primary) { on_toggle.run(()); ev.stop_propagation(); } },
             on:key_down = move |ev| {
                 if matches!(ev.key, Key::Named(NamedKey::Enter | NamedKey::Space)) {
                     on_toggle.run(()); ev.prevent_default(); ev.stop_propagation();

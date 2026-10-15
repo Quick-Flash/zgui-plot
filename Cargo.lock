@@ -5547,6 +5547,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "zgui-platform-headless"
+version = "0.1.0"
+source = "git+https://github.com/zortax/zgui?rev=9927866a6b2b48a8898352a150f9465108246b9b#9927866a6b2b48a8898352a150f9465108246b9b"
+dependencies = [
+ "accesskit",
+ "zgui-geom",
+ "zgui-platform",
+ "zgui-vocab",
+]
+
+[[package]]
 name = "zgui-platform-wayland"
 version = "0.1.0"
 source = "git+https://github.com/zortax/zgui?rev=9927866a6b2b48a8898352a150f9465108246b9b#9927866a6b2b48a8898352a150f9465108246b9b"
@@ -5600,6 +5611,8 @@ dependencies = [
  "resvg",
  "windows-sys 0.61.2",
  "zgui",
+ "zgui-platform-headless",
+ "zgui-testkit-scene",
  "zgui-ui",
  "zgui-ui-tokens",
 ]
@@ -5832,6 +5845,24 @@ dependencies = [
  "thiserror 2.0.21",
  "usvg",
  "zgui-color",
+]
+
+[[package]]
+name = "zgui-testkit-scene"
+version = "0.1.0"
+source = "git+https://github.com/zortax/zgui?rev=9927866a6b2b48a8898352a150f9465108246b9b#9927866a6b2b48a8898352a150f9465108246b9b"
+dependencies = [
+ "smallvec",
+ "zgui-atlas",
+ "zgui-bits",
+ "zgui-color",
+ "zgui-geom",
+ "zgui-platform",
+ "zgui-profile",
+ "zgui-render",
+ "zgui-scene",
+ "zgui-text",
+ "zgui-text-style",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ readme = "README.md"
 repository = "https://github.com/Quick-Flash/zgui-plot"
 keywords = ["plotting", "visualization", "zgui", "charts", "docking"]
 categories = ["graphics", "gui"]
-include = ["Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-BSD-3-Clause", "src/**", "examples/**"]
+include = ["Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-BSD-3-Clause", "src/**", "examples/**", "tests/**"]
 
 [dependencies]
 kurbo = "0.13.1"
@@ -27,6 +27,8 @@ workspace = ["zgui", "dep:zgui-ui"]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
+zgui-platform-headless = { git = "https://github.com/zortax/zgui", rev = "9927866a6b2b48a8898352a150f9465108246b9b" }
+zgui-testkit-scene = { git = "https://github.com/zortax/zgui", rev = "9927866a6b2b48a8898352a150f9465108246b9b" }
 zgui-ui-tokens = { git = "https://github.com/zortax/zgui", rev = "9927866a6b2b48a8898352a150f9465108246b9b" }
 
 [[example]]

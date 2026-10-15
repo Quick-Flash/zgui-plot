@@ -1,4 +1,6 @@
 //! Reusable plot configuration and docking interactions. No application data dependencies.
+#[path = "layout/equalize.rs"]
+mod equalize;
 pub mod layout;
 mod resize;
 use layout::{DropZone, Layout, Rect};
