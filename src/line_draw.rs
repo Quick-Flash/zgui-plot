@@ -7,9 +7,21 @@ pub enum Connection {
     Pre,
     Post,
 }
+/// Pixel-spaced line pattern, independent of sample-marker shape.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LinePattern {
+    #[default]
+    Solid,
+    Dashed,
+    Dotted,
+    DashDot,
+    None,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LineDraw {
     pub connection: Connection,
+    pub pattern: LinePattern,
     pub markers: bool,
 }
 

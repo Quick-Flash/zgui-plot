@@ -33,6 +33,12 @@ impl PlotData {
                     for point in &samples[start..end] {
                         add(point.y);
                     }
+                    if drawing
+                        .get(line.id())
+                        .is_some_and(|draw| draw.pattern == crate::line_draw::LinePattern::None)
+                    {
+                        continue;
+                    }
                     let mode = drawing
                         .get(line.id())
                         .copied()
@@ -130,6 +136,7 @@ mod tests {
                 LineDraw {
                     connection: mode,
                     markers: false,
+                    ..Default::default()
                 },
             )]
             .into();

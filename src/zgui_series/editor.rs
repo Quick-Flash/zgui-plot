@@ -49,7 +49,7 @@ pub fn SeriesEditor(
                     TooltipTrigger { Button(size = ButtonSize::IconXs, variant = ButtonVariant::Ghost, class = "line-selection-info", a11y:label = "How to select and edit lines") {
                         vector(class = "info-icon", prop:viewBox = "0 0 20 20", prop:d = "M10 1 A9 9 0 1 1 10 19 A9 9 0 1 1 10 1 M10 9 V15 M10 5 V6", a11y:hidden = true)
                     } }
-                    TooltipContent(class = "line-selection-help") { "Click selects one line. Ctrl-click toggles lines; one line always stays selected. Shift-click selects a range. Width, markers, and connection apply to every selected line; mixed values change together. Color controls stay visible and disabled until one line is selected. " text { {actions.extra_help} } }
+                    TooltipContent(class = "line-selection-help") { "Click selects one line. Ctrl-click toggles lines; one line always stays selected. Shift-click selects a range. Width, line type, markers, and connection apply to every selected line; mixed values change together. Color controls stay visible and disabled until one line is selected. " text { {actions.extra_help} } }
                 }
             }
             column(class = "line-list") {

@@ -59,6 +59,7 @@ mod hit;
 pub mod interaction;
 pub mod labels;
 pub mod line_draw;
+pub mod line_pattern;
 pub mod overlay;
 pub mod palette;
 mod path;

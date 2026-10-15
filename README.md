@@ -59,6 +59,8 @@ Workspace helpers include `WorkspaceGeometry::fitted` for viewport-sized docks,
 `Layout::equalize` for balanced rows/columns, and `PlotLinksMenu` with independent
 checkboxes plus All. Group docking and pane-local guides remain available.
 
+Line settings support solid, dashed, dotted, dash-dot, and markers-only rendering. Patterns and sample markers can be edited for multiple selected lines; choosing line type None enables markers. Pattern preparation runs on background workers with bounded geometry and exports through the same retained scene.
+
 ## Features
 
 | Feature | Provides |

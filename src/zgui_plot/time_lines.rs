@@ -1,7 +1,7 @@
 //! Background viewport preparation shared by all native time plots.
 use crate::{
     PlotGeometry,
-    line_draw::{Connection, LineDraw, prepare},
+    line_draw::{Connection, LineDraw, LinePattern, prepare},
     plot_data::MarkerShape,
     series_samples::{Accuracy, pan_viewport},
     time_series::{SeriesData, TimeSeriesSet},
@@ -15,7 +15,15 @@ use zgui::{
     reactive::RenderEffect,
 };
 type Prepared = Vec<(String, SeriesData, SeriesData, Connection)>;
-type Plan = (Vec<(String, usize, Connection)>, u64, u64, usize, Lod);
+type DrawKey = (Connection, LinePattern, u64);
+type Plan = (
+    Vec<(String, usize, DrawKey)>,
+    u64,
+    u64,
+    usize,
+    Lod,
+    (u64, u64, usize),
+);
 fn compatible(completed: &Plan, latest: &Plan) -> bool {
     completed.0 == latest.0
 }
@@ -51,21 +59,40 @@ pub(super) fn time_lines(
                     (
                         line.id().to_owned(),
                         line.data().samples().as_ptr() as usize,
-                        drawing
-                            .get(line.id())
-                            .copied()
-                            .unwrap_or_default()
-                            .connection,
+                        {
+                            let draw = drawing.get(line.id()).copied().unwrap_or_default();
+                            let width =
+                                if matches!(draw.pattern, LinePattern::Solid | LinePattern::None) {
+                                    0
+                                } else {
+                                    state.style(line.id()).width.to_bits()
+                                };
+                            (draw.connection, draw.pattern, width)
+                        },
                     )
                 })
                 .collect::<Vec<_>>()
         });
+        let patterned = keys.iter().any(|(_, _, (_, pattern, _))| {
+            !matches!(pattern, LinePattern::Solid | LinePattern::None)
+        });
+        let y = state.ranges.get().y;
+        let view = if patterned {
+            (
+                y.min.to_bits(),
+                y.max.to_bits(),
+                geometry.data_height().ceil().clamp(1.0, 8192.0) as usize,
+            )
+        } else {
+            (0, 0, 0)
+        };
         Some((
             keys,
             range.min.to_bits(),
             range.max.to_bits(),
             geometry.data_width().ceil().clamp(1.0, 8192.0) as usize,
             state.lod.get(),
+            view,
         ))
     });
     let prepare_effect = RenderEffect::new(move |_| {
@@ -88,7 +115,7 @@ pub(super) fn time_lines(
                     running.set(false);
                     return;
                 };
-                let (keys, min, max, columns, lod) = request.clone();
+                let (keys, min, max, columns, lod, view) = request.clone();
                 let old = cached_plan.get_value();
                 let cached = prepared.get_untracked();
                 let jobs = series.with_untracked(|set| {
@@ -101,6 +128,7 @@ pub(super) fn time_lines(
                                         && old.2 == max
                                         && old.3 == columns
                                         && old.4 == lod
+                                        && old.5 == view
                                         && old.0.contains(&(id.clone(), *pointer, *mode))
                                 })
                                 .then(|| cached.iter().find(|line| &line.0 == id).cloned())
@@ -129,8 +157,28 @@ pub(super) fn time_lines(
                                     Accuracy::Columns
                                 },
                             );
-                            let steps = prepare(&samples, mode);
-                            (id, samples, steps, mode)
+                            let (connection, pattern, width) = mode;
+                            let steps = if pattern == LinePattern::None {
+                                SeriesData::new(vec![]).unwrap()
+                            } else {
+                                prepare(&samples, connection)
+                            };
+                            let patterned =
+                                if matches!(pattern, LinePattern::Solid | LinePattern::None) {
+                                    steps
+                                } else {
+                                    crate::line_pattern::prepare(
+                                        &steps,
+                                        crate::Ranges::new(
+                                            x,
+                                            (f64::from_bits(view.0), f64::from_bits(view.1)),
+                                        ),
+                                        (columns as f64, view.2 as f64),
+                                        pattern,
+                                        f64::from_bits(width),
+                                    )
+                                };
+                            (id, samples, patterned, connection)
                         })
                         .collect()
                 })
@@ -191,14 +239,24 @@ pub(super) fn time_lines(
                 }
                 let [r, g, b, a] = style.color;
                 let color = Color::srgb_u8(r, g, b, (f64::from(a) * alpha) as u8);
-                push_prepared_line(
-                    scene,
-                    line,
-                    color,
-                    style.width.max(0.5),
-                    lod,
-                    kurbo::Affine::IDENTITY,
-                );
+                if settings.get(id).copied().unwrap_or_default().pattern != LinePattern::None
+                    && line.samples().len() >= 2
+                {
+                    push_prepared_line(
+                        scene,
+                        line,
+                        color,
+                        style.width.max(0.5),
+                        if settings.get(id).copied().unwrap_or_default().pattern
+                            == LinePattern::Solid
+                        {
+                            lod
+                        } else {
+                            Lod::Exact
+                        },
+                        kurbo::Affine::IDENTITY,
+                    );
+                }
                 if settings.get(id).copied().unwrap_or_default().markers
                     || original.samples().len() == 1
                 {
@@ -236,11 +294,16 @@ mod tests {
     #[test]
     fn continuous_pan_keeps_completed_work_but_source_changes_reject_it() {
         let completed = (
-            vec![("sample".into(), 123, Connection::Pre)],
+            vec![(
+                "sample".into(),
+                123,
+                (Connection::Pre, LinePattern::Solid, 0),
+            )],
             0,
             100,
             800,
             Lod::Columns,
+            (0, 0, 0),
         );
         let mut latest = completed.clone();
         latest.1 = 10;
@@ -250,7 +313,7 @@ mod tests {
         latest.0[0].1 = 456;
         assert!(!compatible(&completed, &latest));
         latest.0[0].1 = 123;
-        latest.0[0].2 = Connection::Post;
+        latest.0[0].2.0 = Connection::Post;
         assert!(!compatible(&completed, &latest));
         latest.0.clear();
         assert!(!compatible(&completed, &latest));

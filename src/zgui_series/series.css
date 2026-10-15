@@ -50,7 +50,7 @@
 .color-picker-disabled .color-hue.zui-slider > .zui-slider__thumb { background: #707874; }
 .appearance-controls > .heading { height: 16px; min-height: 16px; white-space: nowrap; }
 .line-style { gap: 8px; padding-top: 8px; border-top: 1px solid #304339; }
-.plot-editor-surface .line-marker.chosen, .plot-editor-surface .line-connection.chosen { background: #35553e; border-color: #75a77b; }
+.plot-editor-surface .line-pattern.chosen, .plot-editor-surface .line-marker.chosen, .plot-editor-surface .line-connection.chosen { background: #35553e; border-color: #75a77b; }
 .editor-empty { padding: 12px 0; }
 .color-hue.zui-slider { height: 24px; }
 .color-hue.zui-slider > .zui-slider__track { height: 14px; background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); }
