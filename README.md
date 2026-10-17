@@ -25,6 +25,7 @@ The `zgui-plot` package imports as `zgui_plot`. Use `default-features = false` t
 ## Editable series plots
 
 With `workspace`, `zgui_series::SeriesPlot` adds compact editable legends,
+per-plot legend collapse/expand (heading and line settings stay accessible),
 Ctrl/Shift multi-selection, fixed-layout appearance settings, disabled color
 controls for multiple selections, hidden-line hover previews, legend reorder,
 cross-pane drag feedback, and snapped linked pointers/readouts.

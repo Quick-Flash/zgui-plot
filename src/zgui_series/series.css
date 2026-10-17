@@ -73,3 +73,6 @@
 .marker-radius-disabled .line-radius.zui-slider > .zui-slider__track > .zui-slider__range { background: #4a524e; }
 .marker-radius-disabled .line-radius.zui-slider > .zui-slider__thumb { background: #707874; border-color: #4a524e; box-shadow: none; }
 .marker-radius-controls > .heading { height: 16px; min-height: 16px; white-space: nowrap; }
+
+.workbench-legend .legend-collapse.zui-button { min-height: 22px; height: 22px; padding: 0 3px; border: none; background: transparent; color: inherit; }
+.workbench-legend .legend-collapse.zui-button:hover { background: #24312b; }
