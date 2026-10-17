@@ -22,6 +22,7 @@ pub fn PlotTabs(
     #[prop(optional)]
     on_rename: Option<UnsyncCallback<(u64, String)>>,
 ) -> impl IntoView {
+    let last_click = StoredValue::new_local(None::<(u64, Instant, (f64, f64))>);
     let editing = RwSignal::new_local(None::<u64>);
     let draft = RwSignal::new_local(String::new());
     let rename_input = NodeRef::new();
@@ -31,6 +32,7 @@ pub fn PlotTabs(
         if on_rename.is_none() {
             return;
         }
+        last_click.set_value(None);
         draft.set(title.run(id));
         editing.set(Some(id));
         rename_frame.set_value(Some(request_frame(move |_| {
@@ -164,6 +166,7 @@ pub fn PlotTabs(
                         if source != tab_id { return; }
                         tab_pointer.set((ev.position.x.0, ev.position.y.0));
                         if !moving && (ev.position.x.0 - x).hypot(ev.position.y.0 - y) >= 5.0 {
+                            last_click.set_value(None);
                             tab_drag.update(|drag| { if let Some(drag) = drag { drag.3 = true; } });
                         }
                         if let Some((source, _, _, true, _)) = tab_drag.get_untracked() {
@@ -213,9 +216,19 @@ pub fn PlotTabs(
                         if clicked {
                             ev.prevent_default(); ev.stop_propagation();
                             select_plot(tab_id);
+                            // Tab dragging owns pointer capture and suppresses framework activation,
+                            // so its ordinary clicks must also recognize double-click here.
+                            let now = Instant::now();
+                            let position = (f64::from(ev.position.x.0), f64::from(ev.position.y.0));
+                            let double = last_click.get_value().is_some_and(|(id, at, previous)| {
+                                id == tab_id && crate::interaction::is_double_click(now.saturating_duration_since(at), previous, position)
+                            });
+                            last_click.set_value(if double { None } else { Some((tab_id, now, position)) });
+                            if double { begin_rename(tab_id); }
                         }
                     },
                     on:pointer_cancel = move |ev| {
+                        last_click.set_value(None);
                         tab_drag.set(None); tab_drop_target.set(None); tab_preview.set(None); dock.group_target.set(None); ev.release_pointer();
                     },
                     on:click = move |ev| {
@@ -241,6 +254,7 @@ pub fn PlotTabs(
                         Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "plot-tab-select",
                             on:double_click = move |ev| { begin_rename(tab_id); ev.prevent_default(); ev.stop_propagation(); },
                             on:key_down = move |ev| {
+                                last_click.set_value(None);
                                 if ev.key == Key::Named(NamedKey::F2) { begin_rename(tab_id); ev.prevent_default(); ev.stop_propagation(); }
                             }) {{move || title.run(tab_id)}}
                     }
