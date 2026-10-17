@@ -59,6 +59,7 @@ pub fn DataPlot(
     show_legend: bool,
     #[prop(default = true)] show_pointer: bool,
     #[prop(default = true)] show_cursor_values: bool,
+    #[prop(optional)] background_layer: Option<ChildrenFn>,
     #[prop(attrs)] attrs: Attrs,
 ) -> impl IntoView {
     #[cfg(not(feature = "workspace"))]
@@ -409,6 +410,7 @@ pub fn DataPlot(
                 on_hover = on_hover, ticks = ticks, title = title, legend_ref = legend, show_pointer = show_pointer, show_cursor_values = show_cursor_values,
                 cursor_format = UnsyncCallback::new(move |(x, y)| if matches!(series.get(), PlotData::Histogram(_)) { format!("X: {}", format_value(Axis::X, x)) } else { format!("X: {} | Y: {}", format_value(Axis::X, x), format_value(Axis::Y, y)) }),
                 background = BACKGROUND.to_owned()) {
+                {background_layer.map(|layer| layer.view())}
                 {zgui::elements::canvas().class("time-series-layer").scene(&grid)}
                 {zgui::elements::canvas().class("time-series-layer").scene(&annotation_handle)}
                 {zgui::elements::canvas().class("time-series-layer").scene(&lines)}

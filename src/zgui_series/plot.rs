@@ -15,6 +15,17 @@ pub fn SeriesPlot(
     #[prop(optional)] snapshot: Option<crate::zgui_svg::PlotSnapshotSource>,
     #[prop(optional)] format: Option<UnsyncCallback<(crate::labels::Axis, f64), String>>,
     #[prop(optional)] cursor_format: Option<UnsyncCallback<(f64, f64), String>>,
+    /// Content drawn below grid and series.
+    #[prop(optional)]
+    background_layer: Option<ChildrenFn>,
+    /// Content drawn above series and below legend.
+    #[prop(optional)]
+    overlay: Option<ChildrenFn>,
+    #[prop(default = Signal::derive_local(|| false))] legend_extra_visible: Signal<
+        bool,
+        LocalStorage,
+    >,
+    #[prop(optional)] children: Option<ChildrenFn>,
     #[prop(attrs)] attrs: Attrs,
 ) -> impl IntoView {
     super::install();
@@ -148,9 +159,10 @@ pub fn SeriesPlot(
                 on_line_settings = UnsyncCallback::new(move |()| settings_open.set(true)),
                 line_settings_enabled = Signal::derive_local(move || !pane.lines.with(Vec::is_empty)),
                 title = Signal::derive_local(String::new),
-                format = format, snapshot = snapshot) {}
+                format = format, snapshot = snapshot, background_layer = move || AnyView::new(background_layer.as_ref().map(|layer| layer.view()))) {}
+            {overlay.map(|layer| layer.view())}
             {linked_canvas.into_view()}
-            PlotLegend(host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open)
+            PlotLegend(host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open, extra_visible = legend_extra_visible, children = move || AnyView::new(children.as_ref().map(|children| children.view())))
             if move || !pane.lines.get().is_empty() {
             text(class = "snapped-cursor-values", style:top = readout_top) {{readout}}
             }

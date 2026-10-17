@@ -14,8 +14,8 @@ include = ["Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-BSD-3-Clause", "sr
 [dependencies]
 kurbo = "0.13.1"
 resvg = { version = "0.46", default-features = false, features = ["text", "system-fonts"], optional = true }
-zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8", optional = true }
-zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8", optional = true }
+zgui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053", optional = true }
+zgui-ui = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053", optional = true }
 
 [features]
 default = []
@@ -27,9 +27,9 @@ workspace = ["zgui", "dep:zgui-ui"]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
-zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
-zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "63f1c182e5f2c5c495304c008907e458a2e40fa8" }
+zgui-platform-headless = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-testkit-scene = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
+zgui-ui-tokens = { git = "https://github.com/Quick-Flash/zgui", rev = "a110e1b5fcf5461cdb8737f496ce6e23b24fc053" }
 
 [[example]]
 name = "waves"

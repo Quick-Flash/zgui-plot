@@ -30,8 +30,9 @@ pub fn TimeSeriesPlot(
     #[prop(default = true)] show_legend: bool,
     #[prop(default = true)] show_pointer: bool,
     #[prop(default = true)] show_cursor_values: bool,
+    #[prop(optional)] background_layer: Option<ChildrenFn>,
     #[prop(attrs)] attrs: Attrs,
 ) -> impl IntoView {
     let data = Signal::derive_local(move || PlotData::Time(series.get()));
-    view! { DataPlot(series = data, state = state, title = title, visible = visible, draw_series = draw_series, format = format, snapshot = snapshot, on_line_settings = on_line_settings, line_settings_enabled = line_settings_enabled, line_drawing = line_drawing, show_legend = show_legend, show_pointer = show_pointer, show_cursor_values = show_cursor_values, {..attrs}) }
+    view! { DataPlot(series = data, state = state, title = title, visible = visible, draw_series = draw_series, format = format, snapshot = snapshot, on_line_settings = on_line_settings, line_settings_enabled = line_settings_enabled, line_drawing = line_drawing, show_legend = show_legend, show_pointer = show_pointer, show_cursor_values = show_cursor_values, background_layer = move || AnyView::new(background_layer.as_ref().map(|layer| layer.view())), {..attrs}) }
 }
