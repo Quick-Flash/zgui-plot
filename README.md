@@ -39,6 +39,10 @@ state under a durable owner, outside transient dialogs. The controls install the
 own stylesheet; applications still install surface/time-series sheets and a
 zgui-ui `ThemeProvider`.
 
+`PlotTabs` accepts optional `on_rename: UnsyncCallback<(u64, String)>`. When
+provided, double-clicking a tab title or pressing F2 edits it in place. Enter or
+focus loss commits; Escape cancels. Empty title lets consumer restore default.
+
 `TimeSeriesPlot::line_drawing` maps ordinary string series IDs to
 `line_draw::LineDraw { connection, markers }`. `Connection` supports `Linear`,
 `Pre`, and `Post`. Standard time plots now use bounded background preparation,

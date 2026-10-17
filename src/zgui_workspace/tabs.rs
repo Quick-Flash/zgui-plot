@@ -1,4 +1,4 @@
-use super::{DockPane, DockState, finish_tab_after};
+use super::{DockPane, DockState, FrameHandle, finish_tab_after};
 use crate::workspace::{TabStripSnapshot, layout::DropZone, tab_offsets};
 use crate::zgui_svg::node_rect;
 use std::{
@@ -18,7 +18,42 @@ pub fn PlotTabs(
     on_select: UnsyncCallback<u64>,
     on_close: UnsyncCallback<u64>,
     on_add: UnsyncCallback<u64>,
+    /// Double-click a title or press F2 to edit it in place. Empty name restores caller default.
+    #[prop(optional)]
+    on_rename: Option<UnsyncCallback<(u64, String)>>,
 ) -> impl IntoView {
+    let editing = RwSignal::new_local(None::<u64>);
+    let draft = RwSignal::new_local(String::new());
+    let rename_input = NodeRef::new();
+    let rename_frame = StoredValue::new_local(None::<FrameHandle>);
+    on_cleanup_local(move || rename_frame.set_value(None));
+    let begin_rename = move |id| {
+        if on_rename.is_none() {
+            return;
+        }
+        draft.set(title.run(id));
+        editing.set(Some(id));
+        rename_frame.set_value(Some(request_frame(move |_| {
+            rename_input.focus();
+            rename_input.select_all();
+            rename_frame.set_value(None);
+        })));
+    };
+    let finish_rename = move |id| {
+        if editing.get_untracked() != Some(id) {
+            return;
+        }
+        let name = draft
+            .get_untracked()
+            .trim()
+            .chars()
+            .take(80)
+            .collect::<String>();
+        editing.set(None);
+        if let Some(callback) = on_rename {
+            callback.run((id, name));
+        }
+    };
     let slot = pane;
     let layout = dock.layout;
     let tab_drag = dock.drag;
@@ -101,6 +136,7 @@ pub fn PlotTabs(
                         })
                     },
                     on:pointer_down = move |ev| {
+                        if editing.get_untracked() == Some(tab_id) { ev.stop_propagation(); return; }
                         if ev.button != Some(zgui::vocab::PointerButton::Primary) { return; }
                         if let Some(done) = tab_settle_done.get_value() {
                             tab_settle_frame.set_value(None);
@@ -186,9 +222,28 @@ pub fn PlotTabs(
                         ev.stop_propagation();
                         if suppress_tab_click.get_untracked() != Some(tab_id) { select_plot(tab_id); }
                     }) {
-                    Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "plot-tab-select") {{move || {
-                        title.run(tab_id)
-                    }}}
+                    if move || editing.get() == Some(tab_id) {
+                        Input(class = "plot-tab-name", node_ref = rename_input, value = draft, a11y:label = "Plot tab name",
+                            on:pointer_down = move |ev| ev.stop_propagation(),
+                            on:pointer_up = move |ev| ev.stop_propagation(),
+                            on:click = move |ev| ev.stop_propagation(),
+                            on:double_click = move |ev| ev.stop_propagation(),
+                            on:focus_out = move |_| finish_rename(tab_id),
+                            on:key_down = move |ev| {
+                                match ev.key {
+                                    Key::Named(NamedKey::Enter) => finish_rename(tab_id),
+                                    Key::Named(NamedKey::Escape) => { editing.set(None); },
+                                    _ => return,
+                                }
+                                ev.prevent_default(); ev.stop_propagation();
+                            })
+                    } else {
+                        Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost, class = "plot-tab-select",
+                            on:double_click = move |ev| { begin_rename(tab_id); ev.prevent_default(); ev.stop_propagation(); },
+                            on:key_down = move |ev| {
+                                if ev.key == Key::Named(NamedKey::F2) { begin_rename(tab_id); ev.prevent_default(); ev.stop_propagation(); }
+                            }) {{move || title.run(tab_id)}}
+                    }
                     Button(size = ButtonSize::Xs, variant = ButtonVariant::Ghost,
                         class = "plot-tab-close", a11y:label = "Close plot tab",
                         on:pointer_down = move |ev| ev.stop_propagation(),
