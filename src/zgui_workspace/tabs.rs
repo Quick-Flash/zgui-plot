@@ -27,7 +27,21 @@ pub fn PlotTabs(
     let draft = RwSignal::new_local(String::new());
     let rename_input = NodeRef::new();
     let rename_frame = StoredValue::new_local(None::<FrameHandle>);
-    on_cleanup_local(move || rename_frame.set_value(None));
+    // Wait for the input's binding, not just the editing flag: frame callbacks can
+    // run before the reactive branch has mounted its input.
+    let rename_focus = zgui::reactive::RenderEffect::new(move |_| {
+        if editing.get().is_some() && rename_input.get().is_some() {
+            rename_frame.set_value(Some(request_frame(move |_| {
+                rename_input.focus();
+                rename_input.select_all();
+                rename_frame.set_value(None);
+            })));
+        }
+    });
+    on_cleanup_local(move || {
+        drop(rename_focus);
+        rename_frame.set_value(None);
+    });
     let begin_rename = move |id| {
         if on_rename.is_none() {
             return;
@@ -35,11 +49,6 @@ pub fn PlotTabs(
         last_click.set_value(None);
         draft.set(title.run(id));
         editing.set(Some(id));
-        rename_frame.set_value(Some(request_frame(move |_| {
-            rename_input.focus();
-            rename_input.select_all();
-            rename_frame.set_value(None);
-        })));
     };
     let finish_rename = move |id| {
         if editing.get_untracked() != Some(id) {

@@ -25,6 +25,9 @@ pub fn SeriesPlot(
         bool,
         LocalStorage,
     >,
+    /// Replace default legend rows with caller-provided children.
+    #[prop(default = false)]
+    custom_legend: bool,
     #[prop(optional)] children: Option<ChildrenFn>,
     #[prop(attrs)] attrs: Attrs,
 ) -> impl IntoView {
@@ -162,7 +165,7 @@ pub fn SeriesPlot(
                 format = format, snapshot = snapshot, background_layer = move || AnyView::new(background_layer.as_ref().map(|layer| layer.view()))) {}
             {overlay.map(|layer| layer.view())}
             {linked_canvas.into_view()}
-            PlotLegend(host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open, extra_visible = legend_extra_visible, children = move || AnyView::new(children.as_ref().map(|children| children.view())))
+            PlotLegend(custom_entries = custom_legend, host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open, extra_visible = legend_extra_visible, children = move || AnyView::new(children.as_ref().map(|children| children.view())))
             if move || !pane.lines.get().is_empty() {
             text(class = "snapped-cursor-values", style:top = readout_top) {{readout}}
             }

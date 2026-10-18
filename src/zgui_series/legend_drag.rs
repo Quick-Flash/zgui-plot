@@ -47,8 +47,19 @@ pub struct LegendHost {
     pub hit_plot: UnsyncCallback<(f32, f32), Option<u64>>,
     pub accepts: UnsyncCallback<(u64, u64, u64), bool>,
     pub actions: SeriesActions,
+    /// Optional consumer order including custom legend entries.
+    pub order: Option<UnsyncCallback<u64, Vec<u64>>>,
 }
 impl LegendHost {
+    pub fn keys(self, pane: SeriesPane) -> Vec<u64> {
+        self.order.map_or_else(
+            || {
+                pane.lines
+                    .with(|lines| lines.iter().map(|line| line.id).collect())
+            },
+            |order| order.run(pane.id),
+        )
+    }
     pub fn update(self, x: f32, y: f32) {
         let Some(mut drag) = self.drag.state.get_untracked() else {
             return;
@@ -68,12 +79,12 @@ impl LegendHost {
             if !self.visible.run(pane.id) {
                 continue;
             }
-            let lines = pane.lines.get_untracked();
+            let lines = self.keys(pane);
             for (index, line) in lines.iter().enumerate() {
                 let Some(node) = self
                     .drag
                     .rows
-                    .with_value(|rows| rows.get(&(pane.id, line.id)).copied())
+                    .with_value(|rows| rows.get(&(pane.id, *line)).copied())
                 else {
                     continue;
                 };
@@ -87,9 +98,9 @@ impl LegendHost {
                     && py < bounds.origin.y.0 + bounds.size.height.0
                 {
                     let before = if py < bounds.origin.y.0 + bounds.size.height.0 / 2.0 {
-                        Some(line.id)
+                        Some(*line)
                     } else {
-                        lines.get(index + 1).map(|line| line.id)
+                        lines.get(index + 1).copied()
                     };
                     return Some(LineDrop {
                         pane: pane.id,

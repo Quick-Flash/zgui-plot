@@ -38,7 +38,7 @@ pub fn LegendEntry(host: LegendHost, pane: Pane, line: Line) -> impl IntoView {
         row(class = "legend-entry", node_ref = row,
             class:legend-dragging = move || drag.state.get().is_some_and(|source| source.pane == pane.id && source.line == id && source.moving),
             class:legend-insert-before = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before == Some(id)),
-            class:legend-insert-after = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before.is_none()) && pane.lines.with(|lines| lines.last().is_some_and(|line| line.id == id))) {
+            class:legend-insert-after = move || drag.target.get().is_some_and(|target| target.pane == pane.id && target.before.is_none()) && host.keys(pane).last() == Some(&id)) {
             row(class = "legend-drag-source", a11y:label = format!("Drag {} to move; Up/Down reorders", line.label()),
                 on:pointer_enter = move |_| pane.plot.emphasized.set(Some(id.to_string())),
                 on:pointer_leave = move |_| {
@@ -77,11 +77,11 @@ pub fn LegendEntry(host: LegendHost, pane: Pane, line: Line) -> impl IntoView {
                 on:key_down:capture = move |event| {
                     use zgui::vocab::{Key, NamedKey};
                     if event.key == Key::Named(NamedKey::Escape) { drag.cancel(); event.prevent_default(); event.stop_propagation(); return; }
-                    let lines = pane.lines.get_untracked();
-                    let Some(index) = lines.iter().position(|line| line.id == id) else { return; };
+                    let lines = host.keys(pane);
+                    let Some(index) = lines.iter().position(|line| *line == id) else { return; };
                     let before = match event.key {
-                        Key::Named(NamedKey::ArrowUp) if index > 0 => Some(lines[index - 1].id),
-                        Key::Named(NamedKey::ArrowDown) if index + 1 < lines.len() => lines.get(index + 2).map(|line| line.id),
+                        Key::Named(NamedKey::ArrowUp) if index > 0 => Some(lines[index - 1]),
+                        Key::Named(NamedKey::ArrowDown) if index + 1 < lines.len() => lines.get(index + 2).copied(),
                         _ => return,
                     };
                     host.actions.move_line.run((pane.id, id, pane.id, before)); event.prevent_default(); event.stop_propagation();

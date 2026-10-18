@@ -7,6 +7,7 @@ mod editor;
 mod legend;
 mod legend_drag;
 mod legend_entry;
+pub use legend_entry::*;
 mod line_style;
 mod plot_editor;
 pub use color_picker::*;

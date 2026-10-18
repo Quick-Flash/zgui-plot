@@ -10,6 +10,7 @@ pub fn PlotLegend(
     pane: Pane,
     node_ref: NodeRef,
     #[prop(default = Signal::derive_local(|| false))] extra_visible: Signal<bool, LocalStorage>,
+    #[prop(default = false)] custom_entries: bool,
     #[prop(optional)] children: Option<ChildrenFn>,
     #[prop(default = RwSignal::new_local(false))] settings_open: RwSignal<bool, LocalStorage>,
 ) -> impl IntoView {
@@ -30,8 +31,10 @@ pub fn PlotLegend(
                 PlotEditor(actions = host.actions, pane = pane, open = settings_open)
             }
             if move || !collapsed.get() {
+            if move || !custom_entries {
             for line in move || pane.lines.get(), key = |line| (line.id, line.label()) {
                 LegendEntry(host = host, pane = pane, line = line)
+            }
             }
             {children.with_value(|children| children.as_ref().map(|children| children.view()))}
             }
