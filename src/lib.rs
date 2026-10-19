@@ -76,6 +76,10 @@ pub mod zgui_plot;
 /// PNG rendering from same SVG document used for vector exports.
 #[cfg(feature = "raster")]
 pub mod raster;
+
+/// Native image clipboard, using the same SVG renderer as PNG export.
+#[cfg(feature = "clipboard")]
+pub mod clipboard;
 mod series;
 
 #[cfg(feature = "zgui")]

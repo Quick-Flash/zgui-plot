@@ -3,6 +3,12 @@ use std::sync::{Arc, OnceLock};
 
 /// Render vector geometry at twice the SVG width and height for crisp PNG exports.
 pub fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
+    render_svg(svg)?
+        .encode_png()
+        .map_err(|error| format!("cannot encode plot PNG: {error}"))
+}
+
+pub(crate) fn render_svg(svg: &str) -> Result<resvg::tiny_skia::Pixmap, String> {
     const SCALE: u32 = 2;
     static FONTS: OnceLock<Arc<resvg::usvg::fontdb::Database>> = OnceLock::new();
     let fonts = FONTS.get_or_init(|| {
@@ -32,7 +38,5 @@ pub fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
         resvg::tiny_skia::Transform::from_scale(SCALE as f32, SCALE as f32),
         &mut pixels.as_mut(),
     );
-    pixels
-        .encode_png()
-        .map_err(|error| format!("cannot encode plot PNG: {error}"))
+    Ok(pixels)
 }

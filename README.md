@@ -73,6 +73,7 @@ Line settings support solid, dashed, dotted, dash-dot, and markers-only renderin
 | Default / none | Geometry, ranges, interaction controller, histogram, docking tree and assignment model |
 | `zgui` | Retained series renderer, interactive surfaces, legends, linked bounds/pointer, SVG snapshots |
 | `raster` | PNG rendering from SVG |
+| `clipboard` | Native image clipboard (includes `raster`), with X11/Wayland support |
 | `workspace` | `zgui` plus `zgui-ui` docking tabs, pane host, splitters, settings and signal drag/drop |
 
 For native UI consumers, disable default features and enable `workspace` and optional `raster` on the dependency entry. Use the public Git source above for external consumers. Zgui must resolve to same revision as `zgui-plot`.
@@ -192,6 +193,12 @@ chooses destination and runs `format.save(&svg, &path)` on a worker thread.
 `capture_workspace_with_overlay` composes visible docks at current positions;
 maximized and hidden tabs follow the supplied layout. PNG uses the same SVG
 geometry at twice its width and height.
+
+Enable `clipboard` and keep a `clipboard::ScreenshotClipboard` in application state.
+Pass `on_copy` to `ScreenshotMenu` to show **Copy image**, then capture SVG on the UI
+thread and call `clipboard.copy(&svg)` on a blocking worker. Retain clipboard handle
+until application closes so Linux can serve paste requests. Clipboard stays lazy;
+opening camera menu performs no rendering, font loading, or clipboard access.
 
 Custom plot components call `SnapshotLayers::current_or_new()` before building
 children. Register retained `CanvasHandle`s with `register_canvas` as

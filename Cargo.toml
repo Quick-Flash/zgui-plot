@@ -12,6 +12,7 @@ categories = ["graphics", "gui"]
 include = ["Cargo.toml", "README.md", "LICENSE-MIT", "LICENSE-BSD-3-Clause", "src/**", "examples/**", "tests/**"]
 
 [dependencies]
+arboard = { version = "3.6.1", default-features = false, features = ["image-data", "wayland-data-control"], optional = true }
 kurbo = "0.13.1"
 resvg = { version = "0.46", default-features = false, features = ["text", "system-fonts"], optional = true }
 zgui = { git = "https://github.com/zortax/zgui", optional = true }
@@ -21,6 +22,7 @@ zgui-ui = { git = "https://github.com/zortax/zgui", optional = true }
 default = []
 zgui = ["dep:zgui"]
 raster = ["dep:resvg"]
+clipboard = ["raster", "dep:arboard"]
 workspace = ["zgui", "dep:zgui-ui"]
 
 [target.'cfg(windows)'.dev-dependencies]

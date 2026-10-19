@@ -7,6 +7,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn ScreenshotMenu(
     on_export: UnsyncCallback<ScreenshotFormat>,
+    #[prop(optional)] on_copy: Option<UnsyncCallback<()>>,
     #[prop(into, default="Screenshot plot".into())] label: String,
 ) -> impl IntoView {
     install_stylesheet("plot-screenshot", include_str!("screenshot.css"));
@@ -19,6 +20,9 @@ pub fn ScreenshotMenu(
                 MenuItem(on_select=UnsyncCallback::new(move |()|on_export.run(ScreenshotFormat::Svg))) {"Save SVG"}
                 if move ||cfg!(feature="raster") {
                     MenuItem(on_select=UnsyncCallback::new(move |()|on_export.run(ScreenshotFormat::Png))) {"Save PNG"}
+                    if move ||on_copy.is_some() {
+                        MenuItem(on_select=UnsyncCallback::new(move |()|{if let Some(copy)=on_copy {copy.run(())}})) {"Copy image"}
+                    }
                 }
             }
         }
