@@ -57,6 +57,16 @@ pub fn capture_workspace(
     layout: &Layout,
     background: &str,
 ) -> Result<String, String> {
+    capture_workspace_with_overlay(slots, maximized, layout, background, false)
+}
+
+pub fn capture_workspace_with_overlay(
+    slots: &[WorkspaceSnapshot],
+    maximized: Option<u64>,
+    layout: &Layout,
+    background: &str,
+    include_overlay: bool,
+) -> Result<String, String> {
     let mut snapshots = Vec::new();
     for slot in slots
         .iter()
@@ -72,7 +82,11 @@ pub fn capture_workspace(
                     height: snapshot.height,
                     ..bounds
                 },
-                snapshot.svg.clean,
+                if include_overlay {
+                    snapshot.svg.with_overlay
+                } else {
+                    snapshot.svg.clean
+                },
             )
         } else {
             let bounds = node_rect(slot.node)

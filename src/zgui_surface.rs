@@ -57,62 +57,95 @@ pub fn wheel_factor(delta: &ScrollDelta) -> f64 {
     crate::range::wheel_zoom_factor(pixels)
 }
 
-/// Interactive plot shell. `node_ref` is the outer box the caller measures for
-/// its geometry; positions passed to callbacks are relative to it.
-// Component arguments are named props, so their count is not a call-site burden.
-#[allow(clippy::too_many_arguments)]
-#[component]
-pub fn PlotSurface(
-    /// Outer box; the caller observes its size to build `geometry`.
-    node_ref: NodeRef,
-    /// Extra classes on the outer box.
-    #[prop(optional)]
-    class: Option<&'static str>,
-    /// Accessible name of the input layer.
-    label: String,
-    pointer: PlotPointer,
+/// Geometry and range callbacks for an interactive plot surface.
+#[derive(Clone)]
+pub struct SurfaceInteraction {
     /// Current plot geometry, or `None` before the box is measured.
-    geometry: UnsyncCallback<(), Option<PlotGeometry>>,
+    pub geometry: UnsyncCallback<(), Option<PlotGeometry>>,
     /// Ranges currently shown.
-    ranges: UnsyncCallback<(), Ranges>,
+    pub ranges: UnsyncCallback<(), Ranges>,
     /// Show ranges changed by dragging, box selection or the wheel.
-    on_update: UnsyncCallback<RangeUpdate>,
+    pub on_update: UnsyncCallback<RangeUpdate>,
     /// Double click: return to the full view.
-    on_reset: UnsyncCallback<()>,
+    pub on_reset: UnsyncCallback<()>,
+    pub on_hover: UnsyncCallback<PlotHover>,
+}
+/// Presentation and optional gestures for an interactive plot surface.
+#[derive(Clone)]
+pub struct SurfaceOptions {
     /// Double-click on an axis handle: fit only that axis. Without callback,
     /// axis double-clicks fall back to `on_reset`.
-    #[prop(optional)]
-    on_fit_axis: Option<UnsyncCallback<Axis>>,
-    on_hover: UnsyncCallback<PlotHover>,
+    pub on_fit_axis: Option<UnsyncCallback<Axis>>,
     /// Called on every primary press before a gesture starts; return `true`
     /// to consume the press (for example a pending export click).
-    #[prop(optional)]
-    on_press: Option<UnsyncCallback<(f64, f64), bool>>,
+    pub on_press: Option<UnsyncCallback<(f64, f64), bool>>,
     /// Escape or pointer cancellation during a drag: restore starting ranges. Without it,
     /// Escape is not handled.
-    #[prop(optional)]
-    on_cancel: Option<UnsyncCallback<Ranges>>,
+    pub on_cancel: Option<UnsyncCallback<Ranges>>,
     /// Positioned tick labels.
-    ticks: Memo<Vec<TickLabel>>,
+    pub ticks: Memo<Vec<TickLabel>>,
     /// Centered title inside plot; legend is moved below it.
-    #[prop(optional)]
-    title: Option<Signal<String, LocalStorage>>,
+    pub title: Option<Signal<String, LocalStorage>>,
     /// Histograms show only the cursor's X value.
-    #[prop(default = false)]
-    cursor_x_only: bool,
+    pub cursor_x_only: bool,
     /// Format cursor data coordinates, for example a date on the X axis.
-    #[prop(optional)]
-    cursor_format: Option<UnsyncCallback<(f64, f64), String>>,
+    pub cursor_format: Option<UnsyncCallback<(f64, f64), String>>,
     /// Anchor cursor values below the caller's legend, aligned to its right edge.
-    #[prop(optional)]
-    legend_ref: Option<NodeRef>,
+    pub legend_ref: Option<NodeRef>,
     /// Background colour of the plot box.
-    background: String,
-    #[prop(default = true)] show_pointer: bool,
-    #[prop(default = true)] show_cursor_values: bool,
-    /// Canvases, legend and other overlays, back to front.
+    pub background: String,
+    pub show_pointer: bool,
+    pub show_cursor_values: bool,
+}
+impl Default for SurfaceOptions {
+    fn default() -> Self {
+        Self {
+            on_fit_axis: None,
+            on_press: None,
+            on_cancel: None,
+            ticks: Memo::new(|_| Vec::new()),
+            title: None,
+            cursor_x_only: false,
+            cursor_format: None,
+            legend_ref: None,
+            background: "#12181c".into(),
+            show_pointer: true,
+            show_cursor_values: true,
+        }
+    }
+}
+
+#[component]
+pub fn PlotSurface(
+    node_ref: NodeRef,
+    #[prop(optional)] class: Option<&'static str>,
+    label: String,
+    pointer: PlotPointer,
     children: Children,
+    interaction: SurfaceInteraction,
+    #[prop(default = SurfaceOptions::default())] options: SurfaceOptions,
 ) -> impl IntoView {
+    let SurfaceInteraction {
+        geometry,
+        ranges,
+        on_update,
+        on_reset,
+        on_hover,
+    } = interaction;
+    let SurfaceOptions {
+        on_fit_axis,
+        on_press,
+        on_cancel,
+        ticks,
+        title,
+        cursor_x_only,
+        cursor_format,
+        legend_ref,
+        background,
+        show_pointer,
+        show_cursor_values,
+    } = options;
+
     let reset_at = move |position: Option<(f64, f64)>| {
         if let Some(axis) = position.and_then(|position| {
             geometry

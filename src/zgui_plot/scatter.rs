@@ -16,5 +16,8 @@ pub fn ScatterPlot(
     #[prop(attrs)] attrs: Attrs,
 ) -> impl IntoView {
     let data = Signal::derive_local(move || PlotData::Scatter(series.get()));
-    view! { DataPlot(series = data, state = state, title = title, visible = visible, format = format, snapshot = snapshot, {..attrs}) }
+    view! { DataPlot(series = data,
+    state = state,
+    {..attrs},
+    options = { crate::zgui_plot::PlotOptions { title, visible, format, snapshot, ..Default::default() } }) }
 }

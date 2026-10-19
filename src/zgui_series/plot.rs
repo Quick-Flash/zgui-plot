@@ -5,36 +5,60 @@ use zgui::{
     reactive::{RenderEffect, UnsyncCallback},
 };
 
-#[allow(clippy::too_many_arguments)] // Component arguments are named props.
+/// Related SeriesPlot settings.
+#[derive(Clone)]
+pub struct SeriesPlotOptions {
+    /// Lock connection style and omit connection controls from line settings.
+    pub fixed_connection: Option<crate::line_draw::Connection>,
+    pub snapshot: Option<crate::zgui_svg::PlotSnapshotSource>,
+    pub format: Option<UnsyncCallback<(crate::labels::Axis, f64), String>>,
+    pub cursor_format: Option<UnsyncCallback<(f64, f64), String>>,
+    /// Content drawn below grid and series.
+    pub background_layer: Option<ChildrenFn>,
+    /// Content drawn above series and below legend.
+    pub overlay: Option<ChildrenFn>,
+    pub legend_extra_visible: Signal<bool, LocalStorage>,
+    /// Replace default legend rows with caller-provided children.
+    pub custom_legend: bool,
+}
+impl Default for SeriesPlotOptions {
+    fn default() -> Self {
+        Self {
+            fixed_connection: None,
+            snapshot: None,
+            format: None,
+            cursor_format: None,
+            background_layer: None,
+            overlay: None,
+            legend_extra_visible: Signal::derive_local(|| false),
+            custom_legend: false,
+        }
+    }
+}
+
 #[component]
 pub fn SeriesPlot(
     host_actions: LegendHost,
     pane: Pane,
     visible: Signal<bool, LocalStorage>,
     linked: RwSignal<Option<(u64, PlotPoint)>, LocalStorage>,
-    /// Lock connection style and omit connection controls from line settings.
-    #[prop(optional)]
-    fixed_connection: Option<crate::line_draw::Connection>,
-    #[prop(optional)] snapshot: Option<crate::zgui_svg::PlotSnapshotSource>,
-    #[prop(optional)] format: Option<UnsyncCallback<(crate::labels::Axis, f64), String>>,
-    #[prop(optional)] cursor_format: Option<UnsyncCallback<(f64, f64), String>>,
-    /// Content drawn below grid and series.
-    #[prop(optional)]
-    background_layer: Option<ChildrenFn>,
-    /// Content drawn above series and below legend.
-    #[prop(optional)]
-    overlay: Option<ChildrenFn>,
-    #[prop(default = Signal::derive_local(|| false))] legend_extra_visible: Signal<
-        bool,
-        LocalStorage,
-    >,
-    /// Replace default legend rows with caller-provided children.
-    #[prop(default = false)]
-    custom_legend: bool,
     #[prop(optional)] children: Option<ChildrenFn>,
     #[prop(attrs)] attrs: Attrs,
+    #[prop(default = SeriesPlotOptions::default())] options: SeriesPlotOptions,
 ) -> impl IntoView {
+    let SeriesPlotOptions {
+        fixed_connection,
+        snapshot,
+        format,
+        cursor_format,
+        background_layer,
+        overlay,
+        legend_extra_visible,
+        custom_legend,
+    } = options;
+
     super::install();
+    crate::zgui_svg::SnapshotLayers::current_or_new();
     let settings_open = RwSignal::new_local(false);
     let host = NodeRef::new();
     let bounds = host.observe_border_box();
@@ -162,27 +186,47 @@ pub fn SeriesPlot(
             })
             .collect()
     });
+    let legend_options = crate::zgui_series::legend::LegendOptions {
+        fixed_connection,
+        custom_entries: custom_legend,
+        settings_open,
+        extra_visible: legend_extra_visible,
+    };
+    let plot_options = crate::zgui_plot::PlotOptions {
+        visible,
+        line_drawing: drawing,
+        show_legend: false,
+        show_pointer: false,
+        show_cursor_values: false,
+        on_line_settings: (UnsyncCallback::new(move |()| settings_open.set(true))).into(),
+        line_settings_enabled: Signal::derive_local(move || !pane.lines.with(Vec::is_empty)),
+        title: Signal::derive_local(String::new),
+        format,
+        snapshot,
+        ..Default::default()
+    };
     view! {
-        column(class = "cursor-plot", node_ref = host, {..attrs},
-            on:pointer_move = move |event| {
-                if !dragging.get_untracked() { position.set(crate::zgui_renderer::local_position(&host, event.position)); }
-            },
-            on:pointer_down:capture = move |_| { dragging.set(true); position.set(None); },
-            on:pointer_up = move |_| dragging.set(false),
-            on:pointer_cancel = move |_| { dragging.set(false); position.set(None); },
-            on:pointer_leave = move |_| position.set(None),
-            on:wheel:capture = move |_| position.set(None)) {
-            TimeSeriesPlot(series = pane.series, state = pane.plot, visible = visible, line_drawing = drawing, show_legend = false, show_pointer = false, show_cursor_values = false,
-                on_line_settings = UnsyncCallback::new(move |()| settings_open.set(true)),
-                line_settings_enabled = Signal::derive_local(move || !pane.lines.with(Vec::is_empty)),
-                title = Signal::derive_local(String::new),
-                format = format, snapshot = snapshot, background_layer = move || AnyView::new(background_layer.as_ref().map(|layer| layer.view()))) {}
-            {overlay.map(|layer| layer.view())}
-            {linked_canvas.into_view()}
-            PlotLegend(fixed_connection = fixed_connection, custom_entries = custom_legend, host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open, extra_visible = legend_extra_visible, children = move || AnyView::new(children.as_ref().map(|children| children.view())))
-            if move || !pane.lines.get().is_empty() {
-            text(class = "snapped-cursor-values", style:top = readout_top) {{readout}}
+            column(class = "cursor-plot", node_ref = host, {..attrs},
+                on:pointer_move = move |event| {
+                    if !dragging.get_untracked() { position.set(crate::zgui_renderer::local_position(&host, event.position)); }
+                },
+                on:pointer_down:capture = move |_| { dragging.set(true); position.set(None); },
+                on:pointer_up = move |_| dragging.set(false),
+                on:pointer_cancel = move |_| { dragging.set(false); position.set(None); },
+                on:pointer_leave = move |_| position.set(None),
+                on:wheel:capture = move |_| position.set(None)) {
+                TimeSeriesPlot(series=pane.series,state=pane.plot,options=plot_options,
+                    background_layer=move || AnyView::new(background_layer.as_ref().map(|layer| layer.view()))) {}
+                {overlay.map(|layer| layer.view())}
+                {linked_canvas.into_view()}
+                PlotLegend(host = host_actions,
+    pane = pane,
+    node_ref = legend,
+    children = move || AnyView::new(children.as_ref().map(|children| children.view())),
+    options = legend_options)
+                if move || !pane.lines.get().is_empty() {
+                text(class = "snapped-cursor-values", style:top = readout_top) {{readout}}
+                }
             }
         }
-    }
 }

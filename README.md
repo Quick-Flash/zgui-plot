@@ -177,7 +177,37 @@ zgui-ui. Custom surfaces can compose `zgui_workspace::PlotFitMenu` directly.
 
 `PlotState::fit_axes(&PlotData, Axes)` and `fit_axis(&PlotData, Axis)` preserve
 unselected axes and ignore hidden series; empty or entirely hidden data leaves
-the view unchanged. `PlotSurface::on_fit_axis` exposes axis-aware double-click
+the view unchanged. `SurfaceOptions::on_fit_axis` exposes axis-aware double-click
 to custom consumers; omitting it retains full-reset fallback. `HitZones` exposes
 `y_axis_width`; `y_min_handle = false` uses the whole bottom band for X bounds.
 Right-clicking a legend entry does not toggle it.
+
+## Screenshots
+
+Enable `workspace` and `raster` for shared SVG/PNG screenshot controls.
+Set `options.snapshot` to a `zgui_svg::PlotSnapshotSource` on `SeriesPlot`,
+`TimeSeriesPlot`, or `DataPlot`. `zgui_workspace::ScreenshotMenu` emits a `ScreenshotFormat`; host
+chooses destination and runs `format.save(&svg, &path)` on a worker thread.
+`capture_plot(source, true)` captures current view with overlays.
+`capture_workspace_with_overlay` composes visible docks at current positions;
+maximized and hidden tabs follow the supplied layout. PNG uses the same SVG
+geometry at twice its width and height.
+
+Custom plot components call `SnapshotLayers::current_or_new()` before building
+children. Register retained `CanvasHandle`s with `register_canvas` as
+`Background`, `Foreground`, or `Overlay`. `register_description` adds vector
+titles, labels, measurement boxes, and other chrome. Registrations expire with
+component ownership, so remounting or closing docks removes stale layers.
+
+## Component options
+
+`DataPlot` and `TimeSeriesPlot` share `zgui_plot::PlotOptions`; `SeriesPlot`
+uses `zgui_series::SeriesPlotOptions`. Pass optional formatting, visibility,
+snapshots, and line drawing through `options`, using `..Default::default()`
+for remaining controls. `SeriesPlotOptions` also owns background/overlay
+`ChildrenFn` layers. Typed plot `background_layer` remains a named child prop.
+
+Custom `PlotSurface` consumers pass required geometry/range callbacks through
+`SurfaceInteraction`, and optional display/gesture settings through
+`SurfaceOptions`. `LegendItem` groups marker and colors in `LegendAppearance`.
+This replaces oversized argument lists without Clippy suppressions.

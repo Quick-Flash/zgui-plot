@@ -1,7 +1,11 @@
+mod export;
+mod layers;
 mod snapshot;
+pub use export::{ScreenshotFormat, capture_plot};
+pub use layers::{SnapshotLayer, SnapshotLayers, register_canvas, register_description};
 pub use snapshot::{
-    PlotSnapshot, PlotSnapshotSource, WorkspaceSnapshot, capture_workspace, node_rect,
-    register_snapshot,
+    PlotSnapshot, PlotSnapshotSource, WorkspaceSnapshot, capture_workspace,
+    capture_workspace_with_overlay, node_rect, register_snapshot,
 };
 use std::fmt::Write as _;
 

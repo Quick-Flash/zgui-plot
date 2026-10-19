@@ -76,3 +76,4 @@
 
 .workbench-legend .legend-collapse.zui-button { min-height: 22px; height: 22px; padding: 0 3px; border: none; background: transparent; color: inherit; }
 .workbench-legend .legend-collapse.zui-button:hover { background: #24312b; }
+.legend-chevron { flex: none; width: 12px; height: 12px; color: transparent; --zgui-stroke: #d7e1d9; --zgui-stroke-width: 1.5px; pointer-events: none; }

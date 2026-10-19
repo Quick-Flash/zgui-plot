@@ -208,7 +208,7 @@ fn stock_time_plot_prepares_step_markers_and_exports_them_without_app_renderer()
             let drawing=RwSignal::new_local(BTreeMap::new());
             let source: PlotSnapshotSource=StoredValue::new_local(None);
             *model.borrow_mut()=Some((source,drawing,data));
-            view! { column(class="root") { TimeSeriesPlot(series=Signal::stored_local(series),state=state,line_drawing=Signal::derive_local(move || drawing.get()),snapshot=source) } }
+            view! { column(class="root") { TimeSeriesPlot(series=Signal::stored_local(series),state=state,options={plot::zgui_plot::PlotOptions {line_drawing:Signal::derive_local(move || drawing.get()),snapshot:Some(source),..Default::default()}}) } }
         }).unwrap();
     let mut harness = Harness::new(handler.into_runtime());
     harness.deliver_to_first(SurfaceEvent::Resized(Size::new(

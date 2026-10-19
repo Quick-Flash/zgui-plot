@@ -36,25 +36,31 @@ pub fn toggle_member<K: Ord + Clone>(set: &mut BTreeSet<K>, key: &K) {
 }
 
 /// One clickable, focusable legend entry.
-#[component]
-#[allow(clippy::too_many_arguments)] // Named props; keep static-color callers compatible.
-pub fn LegendItem<K: Clone + PartialEq + 'static>(
-    /// Text after the marker glyph.
-    label: String,
+/// Related LegendItem settings.
+#[derive(Clone)]
+pub struct LegendAppearance {
     /// CSS colour of the entry text.
-    color: String,
+    pub color: String,
     /// Optional live color, e.g. caller-owned series styling controls.
-    #[prop(optional)]
-    color_signal: Option<Signal<String, LocalStorage>>,
-    marker: LegendMarker,
-    /// Whether the series is currently shown.
+    pub color_signal: Option<Signal<String, LocalStorage>>,
+    pub marker: LegendMarker,
+}
+
+#[component]
+pub fn LegendItem<K: Clone + PartialEq + 'static>(
+    label: String,
     visible: Signal<bool, LocalStorage>,
-    /// Called when the entry is clicked or activated from the keyboard.
     on_toggle: UnsyncCallback<()>,
-    /// Published to `hovered` while the pointer is over the entry.
     key: K,
     #[prop(optional)] hovered: Option<RwSignal<Option<K>, LocalStorage>>,
+    appearance: LegendAppearance,
 ) -> impl IntoView {
+    let LegendAppearance {
+        color,
+        color_signal,
+        marker,
+    } = appearance;
+
     let line = marker == LegendMarker::Line;
     let text = marker.label(&label);
     view! {

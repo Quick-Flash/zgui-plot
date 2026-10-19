@@ -13,8 +13,7 @@ use crate::zgui_pointer::PlotPointer;
 use crate::zgui_renderer::{push_grid, push_selection, push_stroke, redraw_on_change, show_ranges};
 use crate::zgui_surface::{PlotHover, PlotSurfaceProps};
 use crate::zgui_svg::{
-    PlotSnapshot, PlotSnapshotSource, register_snapshot, scenes_to_svg_pair,
-    snapshot_canvas_handles,
+    PlotSnapshot, PlotSnapshotSource, register_snapshot, snapshot_canvas_handles,
 };
 use crate::{GridOptions, LabelOptions, PlotDescription, PlotGeometry, PlotPoint};
 use zgui::reactive::{Callable, UnsyncCallback};
@@ -28,40 +27,67 @@ const LABELS: TickLabelLayout = TickLabelLayout {
     x_row: XLabelRow::Inside,
 };
 
-/// Shared time/scatter/histogram shell. Visible series share axis units.
-#[allow(clippy::too_many_arguments)] // Component arguments are named props.
+/// Display, formatting, and export settings shared by typed plots.
+#[derive(Clone)]
+pub struct PlotOptions {
+    pub title: Signal<String, LocalStorage>,
+    pub visible: Signal<bool, LocalStorage>,
+    /// Disable built-in series geometry when consumer supplies custom canvas.
+    pub draw_series: Signal<bool, LocalStorage>,
+    pub format: Option<UnsyncCallback<(Axis, f64), String>>,
+    pub snapshot: Option<PlotSnapshotSource>,
+    /// Optional shared line editor action exposed in grid context menu.
+    pub on_line_settings: Option<UnsyncCallback<()>>,
+    pub line_settings_enabled: Signal<bool, LocalStorage>,
+    /// Per-series interpolation and sample-marker visibility for time plots.
+    pub line_drawing:
+        Signal<std::collections::BTreeMap<String, crate::line_draw::LineDraw>, LocalStorage>,
+    /// Public composition controls for custom legends/readouts; no child-selector CSS needed.
+    pub show_legend: bool,
+    pub show_pointer: bool,
+    pub show_cursor_values: bool,
+}
+impl Default for PlotOptions {
+    fn default() -> Self {
+        Self {
+            title: Signal::derive_local(String::new),
+            visible: Signal::derive_local(|| true),
+            draw_series: Signal::derive_local(|| true),
+            format: None,
+            snapshot: None,
+            on_line_settings: None,
+            line_settings_enabled: Signal::derive_local(|| true),
+            line_drawing: Signal::stored_local(std::collections::BTreeMap::new()),
+            show_legend: true,
+            show_pointer: true,
+            show_cursor_values: true,
+        }
+    }
+}
+
 #[component]
 pub fn DataPlot(
     series: Signal<PlotData, LocalStorage>,
     state: PlotState,
-    #[prop(default = Signal::derive_local(String::new))] title: Signal<String, LocalStorage>,
-    #[prop(default = Signal::derive_local(|| true))] visible: Signal<bool, LocalStorage>,
-    /// Disable built-in series geometry when consumer supplies custom canvas.
-    #[prop(default = Signal::derive_local(|| true))]
-    draw_series: Signal<bool, LocalStorage>,
-    #[prop(optional)] format: Option<UnsyncCallback<(Axis, f64), String>>,
-    #[prop(optional)] snapshot: Option<PlotSnapshotSource>,
-    /// Optional shared line editor action exposed in grid context menu.
-    #[prop(optional)]
-    on_line_settings: Option<UnsyncCallback<()>>,
-    #[prop(default = Signal::derive_local(|| true))] line_settings_enabled: Signal<
-        bool,
-        LocalStorage,
-    >,
-    /// Per-series interpolation and sample-marker visibility for time plots.
-    #[prop(default = Signal::stored_local(std::collections::BTreeMap::new()))]
-    line_drawing: Signal<
-        std::collections::BTreeMap<String, crate::line_draw::LineDraw>,
-        LocalStorage,
-    >,
-    /// Public composition controls for custom legends/readouts; no child-selector CSS needed.
-    #[prop(default = true)]
-    show_legend: bool,
-    #[prop(default = true)] show_pointer: bool,
-    #[prop(default = true)] show_cursor_values: bool,
     #[prop(optional)] background_layer: Option<ChildrenFn>,
     #[prop(attrs)] attrs: Attrs,
+    #[prop(default = PlotOptions::default())] options: PlotOptions,
 ) -> impl IntoView {
+    let PlotOptions {
+        title,
+        visible,
+        draw_series,
+        format,
+        snapshot,
+        on_line_settings,
+        line_settings_enabled,
+        line_drawing,
+        show_legend,
+        show_pointer,
+        show_cursor_values,
+    } = options;
+
+    let snapshot_layers = crate::zgui_svg::SnapshotLayers::current_or_new();
     #[cfg(not(feature = "workspace"))]
     let _ = (on_line_settings, line_settings_enabled);
     let surface = NodeRef::new();
@@ -346,26 +372,37 @@ pub fn DataPlot(
                     ),
                 ]);
             }
-            description.push_legend(
-                entries,
-                (
-                    geometry.right - 6.0,
-                    if plot_title.is_empty() {
-                        4.0
-                    } else {
-                        crate::TITLE_LEGEND_TOP
-                    },
-                ),
-                &theme::legend_box(),
-            );
-            let base = snapshot_canvas_handles(&[&grid, &annotations, &lines])?;
-            let overlay = snapshot_canvas_handles(&[&overlay])?;
+            if show_legend || draw_series.get_untracked() {
+                description.push_legend(
+                    entries,
+                    (
+                        geometry.right - 6.0,
+                        if plot_title.is_empty() {
+                            4.0
+                        } else {
+                            crate::TITLE_LEGEND_TOP
+                        },
+                    ),
+                    &theme::legend_box(),
+                );
+            }
+            let mut base = snapshot_layers.scenes(crate::zgui_svg::SnapshotLayer::Background)?;
+            base.extend(snapshot_canvas_handles(&[&grid, &annotations, &lines])?);
+            base.extend(snapshot_layers.scenes(crate::zgui_svg::SnapshotLayer::Foreground)?);
+            let mut overlay = snapshot_canvas_handles(&[&overlay])?;
+            overlay.extend(snapshot_layers.scenes(crate::zgui_svg::SnapshotLayer::Overlay)?);
+            snapshot_layers.describe(&mut description, false);
+            let clean =
+                crate::zgui_svg::scenes_to_svg(&base.iter().collect::<Vec<_>>(), &description)?;
+            snapshot_layers.describe(&mut description, true);
             Ok(PlotSnapshot {
-                svg: scenes_to_svg_pair(
-                    &base.iter().collect::<Vec<_>>(),
-                    &overlay.iter().collect::<Vec<_>>(),
-                    &description,
-                )?,
+                svg: crate::zgui_svg::SvgPair {
+                    clean,
+                    with_overlay: crate::zgui_svg::scenes_to_svg(
+                        &base.iter().chain(overlay.iter()).collect::<Vec<_>>(),
+                        &description,
+                    )?,
+                },
                 node: surface,
                 width: geometry.width,
                 height: geometry.height,
@@ -398,47 +435,97 @@ pub fn DataPlot(
         let hit = render::hover(&current, state, target, geometry);
         state.hover.set(hit);
     });
+    let surface_interaction = crate::zgui_surface::SurfaceInteraction {
+        geometry: UnsyncCallback::new(move |()| geometry.get()),
+        ranges: UnsyncCallback::new(move |()| state.ranges.get()),
+        on_update: UnsyncCallback::new(move |update| {
+            state.apply(update);
+            cursor.set(None);
+        }),
+        on_reset: UnsyncCallback::new(move |()| {
+            state.fit_axes(&series.get_untracked(), Axes::BOTH);
+            cursor.set(None);
+            pointer.cancel();
+        }),
+        on_hover,
+    };
+    let surface_options = crate::zgui_surface::SurfaceOptions {
+        on_fit_axis: Some(UnsyncCallback::new(move |axis| {
+            state.fit_axes_with_drawing(
+                &series.get_untracked(),
+                Axes {
+                    x: axis == Axis::X,
+                    y: axis == Axis::Y,
+                },
+                &line_drawing.get_untracked(),
+            );
+            cursor.set(None);
+            pointer.cancel();
+        })),
+        on_press: Some(UnsyncCallback::new(move |_| {
+            fit_before_drag.set_value(state.auto_fit.get_untracked());
+            false
+        })),
+        on_cancel: Some(UnsyncCallback::new(move |initial| {
+            state.ranges.set(initial);
+            state.auto_fit.set(fit_before_drag.get_value());
+        })),
+        ticks,
+        title: Some(title),
+        legend_ref: Some(legend),
+        show_pointer,
+        show_cursor_values,
+        cursor_format: Some(UnsyncCallback::new(move |(x, y)| {
+            if matches!(series.get(), PlotData::Histogram(_)) {
+                format!("X: {}", format_value(Axis::X, x))
+            } else {
+                format!(
+                    "X: {} | Y: {}",
+                    format_value(Axis::X, x),
+                    format_value(Axis::Y, y)
+                )
+            }
+        })),
+        background: BACKGROUND.to_owned(),
+        ..Default::default()
+    };
     let plot = view! {
-            PlotSurface(node_ref = surface, class = "time-series-plot", label = "Interactive data plot".into(),
-                pointer = pointer, geometry = UnsyncCallback::new(move |()| geometry.get()),
-                ranges = UnsyncCallback::new(move |()| state.ranges.get()),
-                on_update = UnsyncCallback::new(move |update| { state.apply(update); cursor.set(None); }),
-                on_reset = UnsyncCallback::new(move |()| { state.fit_axes(&series.get_untracked(), Axes::BOTH); cursor.set(None); pointer.cancel(); }),
-                on_fit_axis = UnsyncCallback::new(move |axis| { state.fit_axes_with_drawing(&series.get_untracked(), Axes { x: axis == Axis::X, y: axis == Axis::Y }, &line_drawing.get_untracked()); cursor.set(None); pointer.cancel(); }),
-                on_press = UnsyncCallback::new(move |_| { fit_before_drag.set_value(state.auto_fit.get_untracked()); false }),
-                on_cancel = UnsyncCallback::new(move |initial| { state.ranges.set(initial); state.auto_fit.set(fit_before_drag.get_value()); }),
-                on_hover = on_hover, ticks = ticks, title = title, legend_ref = legend, show_pointer = show_pointer, show_cursor_values = show_cursor_values,
-                cursor_format = UnsyncCallback::new(move |(x, y)| if matches!(series.get(), PlotData::Histogram(_)) { format!("X: {}", format_value(Axis::X, x)) } else { format!("X: {} | Y: {}", format_value(Axis::X, x), format_value(Axis::Y, y)) }),
-                background = BACKGROUND.to_owned()) {
-                {background_layer.map(|layer| layer.view())}
-                {zgui::elements::canvas().class("time-series-layer").scene(&grid)}
-                {zgui::elements::canvas().class("time-series-layer").scene(&annotation_handle)}
-                {zgui::elements::canvas().class("time-series-layer").scene(&lines)}
-                {zgui::elements::canvas().class("time-series-layer plot-hover-layer").scene(&overlay)}
-                if move || show_legend {
-                column(class = "plot-legend", node_ref = legend,
-                    style:right = move || geometry.get().map(|geometry| format!("{}px", geometry.width - geometry.right + 6.0))) {
-                    for label in move || series.get().labels(), key = |label| (label.id().to_owned(), label.label().to_owned()) {
-                        LegendItem(label = label.label().to_owned(), color = state.style(label.id()).css_color(), marker = series.get_untracked().legend_marker(),
-                            color_signal = Signal::derive_local({ let id = label.id().to_owned(); move || state.style(&id).css_color() }),
-                            visible = Signal::derive_local({ let id = label.id().to_owned(); move || !state.hidden.with(|hidden| hidden.contains(&id)) }),
-                            on_toggle = UnsyncCallback::new({ let id = label.id().to_owned(); move |()| state.hidden.update(|hidden| toggle_member(hidden, &id)) }),
-                            key = label.id().to_owned(), hovered = state.emphasized)
-                    }
-                    if move || matches!(series.get(), PlotData::Histogram(_)) {
-                        for curve in move || [HistogramCurve::Cdf, HistogramCurve::Ccdf, HistogramCurve::NormalFit], key = |curve| *curve {
-                            LegendItem(label = match curve { HistogramCurve::Cdf => "CDF", HistogramCurve::Ccdf => "CCDF", HistogramCurve::NormalFit => "Normal fit" }.into(),
-                                color = match curve { HistogramCurve::Cdf => "#ffe0a0", HistogramCurve::Ccdf => "#77b9e8", HistogramCurve::NormalFit => "#ed9186" }.into(),
-                                marker = LegendMarker::Line,
-                                visible = Signal::derive_local(move || { let options = state.histogram.get(); match curve { HistogramCurve::Cdf => options.cdf, HistogramCurve::Ccdf => options.ccdf, HistogramCurve::NormalFit => options.normal_fit } }),
-                                on_toggle = UnsyncCallback::new(move |()| state.histogram.update(|options| match curve { HistogramCurve::Cdf => options.cdf = !options.cdf, HistogramCurve::Ccdf => options.ccdf = !options.ccdf, HistogramCurve::NormalFit => options.normal_fit = !options.normal_fit })),
-                                key = curve, hovered = state.curve_hover)
+                PlotSurface(node_ref = surface,
+    class = "time-series-plot",
+    label = "Interactive data plot".into(),
+    pointer = pointer,
+    interaction = surface_interaction,
+    options = surface_options) {
+                    {background_layer.map(|layer| layer.view())}
+                    {zgui::elements::canvas().class("time-series-layer").scene(&grid)}
+                    {zgui::elements::canvas().class("time-series-layer").scene(&annotation_handle)}
+                    {zgui::elements::canvas().class("time-series-layer").scene(&lines)}
+                    {zgui::elements::canvas().class("time-series-layer plot-hover-layer").scene(&overlay)}
+                    if move || show_legend {
+                    column(class = "plot-legend", node_ref = legend,
+                        style:right = move || geometry.get().map(|geometry| format!("{}px", geometry.width - geometry.right + 6.0))) {
+                        for label in move || series.get().labels(), key = |label| (label.id().to_owned(), label.label().to_owned()) {
+                            LegendItem(label = label.label().to_owned(),
+    visible = Signal::derive_local({ let id = label.id().to_owned(); move || !state.hidden.with(|hidden| hidden.contains(&id)) }),
+    on_toggle = UnsyncCallback::new({ let id = label.id().to_owned(); move |()| state.hidden.update(|hidden| toggle_member(hidden, &id)) }),
+    key = label.id().to_owned(),
+    hovered = state.emphasized,
+    appearance = { crate::zgui_legend::LegendAppearance { color: state.style(label.id()).css_color(), marker: series.get_untracked().legend_marker(), color_signal: (Signal::derive_local({ let id = label.id().to_owned(); move || state.style(&id).css_color() })).into() } })
+                        }
+                        if move || matches!(series.get(), PlotData::Histogram(_)) {
+                            for curve in move || [HistogramCurve::Cdf, HistogramCurve::Ccdf, HistogramCurve::NormalFit], key = |curve| *curve {
+                                LegendItem(label = match curve { HistogramCurve::Cdf => "CDF", HistogramCurve::Ccdf => "CCDF", HistogramCurve::NormalFit => "Normal fit" }.into(),
+    visible = Signal::derive_local(move || { let options = state.histogram.get(); match curve { HistogramCurve::Cdf => options.cdf, HistogramCurve::Ccdf => options.ccdf, HistogramCurve::NormalFit => options.normal_fit } }),
+    on_toggle = UnsyncCallback::new(move |()| state.histogram.update(|options| match curve { HistogramCurve::Cdf => options.cdf = !options.cdf, HistogramCurve::Ccdf => options.ccdf = !options.ccdf, HistogramCurve::NormalFit => options.normal_fit = !options.normal_fit })),
+    key = curve,
+    hovered = state.curve_hover,
+    appearance = { crate::zgui_legend::LegendAppearance { color: match curve { HistogramCurve::Cdf => "#ffe0a0", HistogramCurve::Ccdf => "#77b9e8", HistogramCurve::NormalFit => "#ed9186" }.into(), marker: LegendMarker::Line, color_signal: None } })
+                            }
                         }
                     }
+                    }
                 }
-                }
-            }
-    };
+        };
     #[cfg(feature = "workspace")]
     let plot = {
         use crate::zgui_workspace::PlotFitMenuProps;

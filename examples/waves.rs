@@ -544,8 +544,7 @@ fn Waves() -> impl IntoView {
         view! {
             LegendItem(
                 label = series.label().to_owned(),
-                color = series.css(),
-                marker = series.marker(),
+                appearance = {zgui_plot::zgui_legend::LegendAppearance {color: series.css(),marker:series.marker(),color_signal:None}},
                 visible = Signal::derive_local(move || shown(series)),
                 on_toggle = UnsyncCallback::new(move |()| hidden.update(|hidden| toggle_member(hidden, &series))),
                 key = series,
@@ -604,20 +603,15 @@ fn Waves() -> impl IntoView {
                     {move || if sweeping.get() { "stop sweep" } else { "sweep" }}
                 }
             }
-            PlotSurface(
-                node_ref = surface,
-                class = "plot",
-                label = "Waves plot".to_owned(),
-                pointer = pointer,
-                geometry = UnsyncCallback::new(move |()| geometry.get_untracked()),
-                ranges = UnsyncCallback::new(move |()| ranges.get_untracked()),
-                on_update = on_update,
-                on_reset = UnsyncCallback::new(move |()| { sweeping.set(false); ranges.set(full_view()); }),
-                on_hover = on_hover,
-                on_cancel = UnsyncCallback::new(move |initial| ranges.set(initial)),
-                ticks = ticks,
-                background = "#191d26".to_owned()
-            ) {
+            PlotSurface(node_ref=surface,class="plot",label="Waves plot".to_owned(),pointer=pointer,
+                interaction={zgui_plot::zgui_surface::SurfaceInteraction {
+                    geometry: UnsyncCallback::new(move |()| geometry.get_untracked()),
+                    ranges: UnsyncCallback::new(move |()| ranges.get_untracked()),
+                    on_update, on_reset: UnsyncCallback::new(move |()| { sweeping.set(false); ranges.set(full_view()); }), on_hover
+                }},
+                options={zgui_plot::zgui_surface::SurfaceOptions {
+                    on_cancel: Some(UnsyncCallback::new(move |initial| ranges.set(initial))), ticks, background:"#191d26".to_owned(),..Default::default()
+                }}) {
                 {grid.into_view()}
                 box(class = "plot-clip") {
                     {data_layer.into_view()}

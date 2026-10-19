@@ -48,10 +48,12 @@ fn Demo(series: TimeSeriesSet) -> impl IntoView {
     let first = TimeSeriesState::default();
     let second = TimeSeriesState::default();
     let group = zgui_plot::zgui_link::LinkGroup::new();
-    let options = zgui_plot::zgui_link::LinkOptions {
-        x: true,
-        y: false,
-        pointer: true,
+    let options = {
+        zgui_plot::zgui_link::LinkOptions {
+            x: true,
+            y: false,
+            pointer: true,
+        }
     };
     view! {
         ThemeProvider(scheme = ColorScheme::Dark) {
@@ -87,11 +89,21 @@ fn Panel(
         group,
         RwSignal::new_local(options),
     ));
-    view! { TimeSeriesPlot(series = series, state = state,
-    title = Signal::derive_local(move || format!("Plot {id}")),
-    format = zgui::reactive::UnsyncCallback::new(move |(axis, value)| {
-        if axis == zgui_plot::labels::Axis::X { format!("{:.2}s", value - 1_800_000_000.0) } else { zgui_plot::format_number(value) }
-    })) }
+    let plot_options = zgui_plot::zgui_plot::PlotOptions {
+        title: Signal::derive_local(move || format!("Plot {id}")),
+        format: (zgui::reactive::UnsyncCallback::new(move |(axis, value)| {
+            if axis == zgui_plot::labels::Axis::X {
+                format!("{:.2}s", value - 1_800_000_000.0)
+            } else {
+                zgui_plot::format_number(value)
+            }
+        }))
+        .into(),
+        ..Default::default()
+    };
+    view! { TimeSeriesPlot(series = series,
+    state = state,
+    options = plot_options) }
 }
 
 fn main() -> Result<(), zgui::Error> {

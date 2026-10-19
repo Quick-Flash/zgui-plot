@@ -131,24 +131,36 @@ fn Panel(
             })
         });
     }
+    let plot_options = zgui_plot::zgui_plot::PlotOptions {
+        snapshot: Some(snapshot),
+        title: Signal::derive_local(move || {
+            if id == 1 {
+                "Scatter".into()
+            } else {
+                "Histogram".into()
+            }
+        }),
+        ..Default::default()
+    };
     view! {
-        column(class = "panel", node_ref = node) {
-            row(class = "toolbar") {
-                text { {if id==1{"Scatter"}else{"Histogram"}} }
-                Popover {
-                    PopoverTrigger { "Settings" }
-                    PopoverContent(class = "plot-settings-surface") {
-                        LinkControls(options = links)
-                        DataPlotSettings(state = state, series = series)
+            column(class = "panel", node_ref = node) {
+                row(class = "toolbar") {
+                    text { {if id==1{"Scatter"}else{"Histogram"}} }
+                    Popover {
+                        PopoverTrigger { "Settings" }
+                        PopoverContent(class = "plot-settings-surface") {
+                            LinkControls(options = links)
+                            DataPlotSettings(state = state, series = series)
+                        }
                     }
                 }
+                DataPlot(series = series,
+    state = state,
+    options = plot_options)
+                text(class = "readout") {{move || state.hover.get().map(|hit|format!("{} sample {}: {}, {}",hit.series_id,hit.sample_index,zgui_plot::format_number(hit.point.x),zgui_plot::format_number(hit.point.y)))
+                    .or_else(||state.bin_hover.get().map(|hit|format!("{} .. {}: {} ({:.2}%)",zgui_plot::format_number(hit.bin.start),zgui_plot::format_number(hit.bin.end),hit.bin.count,hit.percent))).unwrap_or_default()}}
             }
-            DataPlot(series = series, state = state, snapshot = snapshot,
-                title = Signal::derive_local(move || if id==1{"Scatter".into()}else{"Histogram".into()}))
-            text(class = "readout") {{move || state.hover.get().map(|hit|format!("{} sample {}: {}, {}",hit.series_id,hit.sample_index,zgui_plot::format_number(hit.point.x),zgui_plot::format_number(hit.point.y)))
-                .or_else(||state.bin_hover.get().map(|hit|format!("{} .. {}: {} ({:.2}%)",zgui_plot::format_number(hit.bin.start),zgui_plot::format_number(hit.bin.end),hit.bin.count,hit.percent))).unwrap_or_default()}}
         }
-    }
 }
 fn main() -> Result<(), zgui::Error> {
     let (scatter, histogram) = sources().expect("valid demo sources");

@@ -180,7 +180,6 @@ impl Tracker {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn reconcile_axis(
     id: u64,
     enabled: bool,
