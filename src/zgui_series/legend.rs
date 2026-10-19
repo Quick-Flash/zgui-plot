@@ -7,6 +7,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn PlotLegend(
     host: LegendHost,
+    #[prop(optional)] fixed_connection: Option<crate::line_draw::Connection>,
     pane: Pane,
     node_ref: NodeRef,
     #[prop(default = Signal::derive_local(|| false))] extra_visible: Signal<bool, LocalStorage>,
@@ -28,7 +29,7 @@ pub fn PlotLegend(
                     on:click = move |event| { collapsed.update(|value| *value = !*value); event.stop_propagation(); }) {
                     {move || if collapsed.get() { "▸ Legend" } else { "▾ Legend" }}
                 }
-                PlotEditor(actions = host.actions, pane = pane, open = settings_open)
+                PlotEditor(fixed_connection = fixed_connection, actions = host.actions, pane = pane, open = settings_open)
             }
             if move || !collapsed.get() {
             if move || !custom_entries {

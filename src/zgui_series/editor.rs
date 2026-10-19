@@ -6,6 +6,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn SeriesEditor(
     actions: SeriesActions,
+    #[prop(optional)] fixed_connection: Option<crate::line_draw::Connection>,
     pane: Pane,
     #[prop(optional)] on_extra: Option<UnsyncCallback<()>>,
     #[prop(attrs)] attrs: Attrs,
@@ -77,7 +78,7 @@ pub fn SeriesEditor(
                 }
             }
             if move || !ids.with(Vec::is_empty) {
-                LineStyle(ids = ids, pane = pane)
+                LineStyle(ids = ids, pane = pane, show_connection = fixed_connection.is_none())
             } else {
                 text(class = "editor-empty muted") { "Select lines to edit their appearance." }
             }

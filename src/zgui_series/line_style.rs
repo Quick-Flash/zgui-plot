@@ -30,7 +30,12 @@ fn drawing(pane: Pane, ids: LineIds, edit: impl Fn(&mut LineDraw)) {
 }
 
 #[component]
-pub fn LineStyle(ids: LineIds, pane: Pane, #[prop(attrs)] attrs: Attrs) -> impl IntoView {
+pub fn LineStyle(
+    ids: LineIds,
+    pane: Pane,
+    #[prop(default = true)] show_connection: bool,
+    #[prop(attrs)] attrs: Attrs,
+) -> impl IntoView {
     super::install();
     let current = move || {
         pane.plot.style(
@@ -92,12 +97,14 @@ pub fn LineStyle(ids: LineIds, pane: Pane, #[prop(attrs)] attrs: Attrs) -> impl 
                         text(class = "heading") {{move || if radius_mixed() { "Marker radius: mixed".into() } else { format!("Marker radius: {:.1} px", current().radius) }}}
                         Slider(class = "line-radius", disabled = markers_disabled, min = 1.0, max = 10.0, step = 0.5, label = "Marker radius", value = Binding::controlled(Signal::derive_local(move || current().radius), move |radius| styles(pane, ids, |style| style.radius = radius)))
                     }
+                    if move || show_connection {
                     text(class = "heading") { "Line connection" }
                     row(class = "plot-toolbar") {
                         for choice in move || [("Linear", Connection::Linear), ("Steps pre", Connection::Pre), ("Steps post", Connection::Post)], key = |choice| choice.0 {
                             Button(size = ButtonSize::Xs, class = "line-connection", class:chosen = move || all(&|id| pane.drawing.with(|drawing| drawing.get(&id).copied().unwrap_or_default().connection == choice.1)),
                                 on:click = move |_| drawing(pane, ids, |drawing| drawing.connection = choice.1)) {{choice.0}}
                         }
+                    }
                     }
                 }
             }

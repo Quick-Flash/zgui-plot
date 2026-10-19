@@ -12,6 +12,9 @@ pub fn SeriesPlot(
     pane: Pane,
     visible: Signal<bool, LocalStorage>,
     linked: RwSignal<Option<(u64, PlotPoint)>, LocalStorage>,
+    /// Lock connection style and omit connection controls from line settings.
+    #[prop(optional)]
+    fixed_connection: Option<crate::line_draw::Connection>,
     #[prop(optional)] snapshot: Option<crate::zgui_svg::PlotSnapshotSource>,
     #[prop(optional)] format: Option<UnsyncCallback<(crate::labels::Axis, f64), String>>,
     #[prop(optional)] cursor_format: Option<UnsyncCallback<(f64, f64), String>>,
@@ -142,10 +145,21 @@ pub fn SeriesPlot(
             })
     };
     let drawing = Signal::derive_local(move || {
-        pane.drawing
+        pane.lines
             .get()
             .into_iter()
-            .map(|(id, style)| (id.to_string(), style))
+            .map(|line| {
+                let style = pane
+                    .drawing
+                    .with(|drawing| drawing.get(&line.id).copied().unwrap_or_default());
+                (line.id, style)
+            })
+            .map(|(id, mut style)| {
+                if let Some(connection) = fixed_connection {
+                    style.connection = connection;
+                }
+                (id.to_string(), style)
+            })
             .collect()
     });
     view! {
@@ -165,7 +179,7 @@ pub fn SeriesPlot(
                 format = format, snapshot = snapshot, background_layer = move || AnyView::new(background_layer.as_ref().map(|layer| layer.view()))) {}
             {overlay.map(|layer| layer.view())}
             {linked_canvas.into_view()}
-            PlotLegend(custom_entries = custom_legend, host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open, extra_visible = legend_extra_visible, children = move || AnyView::new(children.as_ref().map(|children| children.view())))
+            PlotLegend(fixed_connection = fixed_connection, custom_entries = custom_legend, host = host_actions, pane = pane, node_ref = legend, settings_open = settings_open, extra_visible = legend_extra_visible, children = move || AnyView::new(children.as_ref().map(|children| children.view())))
             if move || !pane.lines.get().is_empty() {
             text(class = "snapped-cursor-values", style:top = readout_top) {{readout}}
             }

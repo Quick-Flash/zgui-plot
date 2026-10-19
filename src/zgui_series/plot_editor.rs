@@ -5,6 +5,7 @@ use zgui_ui::prelude::*;
 #[component]
 pub fn PlotEditor(
     actions: SeriesActions,
+    #[prop(optional)] fixed_connection: Option<crate::line_draw::Connection>,
     pane: Pane,
     #[prop(default = RwSignal::new_local(false))] open: RwSignal<bool, LocalStorage>,
 ) -> impl IntoView {
@@ -38,7 +39,7 @@ pub fn PlotEditor(
             DialogContent(class = "plot-settings-surface plot-editor-surface") {
                 column(class = "plot-settings-content") {
                     DialogTitle(class = "settings-title") {{format!("Plot {} line settings", pane.id)}}
-                    SeriesEditor(actions = actions, pane = pane, on_extra = UnsyncCallback::new(move |()| open.set(false)))
+                    SeriesEditor(fixed_connection = fixed_connection, actions = actions, pane = pane, on_extra = UnsyncCallback::new(move |()| open.set(false)))
                     DialogClose(size = ButtonSize::Sm, variant = ButtonVariant::Outline, class = "settings-done") { "Done" }
                 }
             }
