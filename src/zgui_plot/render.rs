@@ -224,8 +224,8 @@ pub fn draw_data(
         }
     }
 }
-pub fn hover(
-    data: &PlotData,
+pub fn hover<'a>(
+    data: &'a PlotData,
     state: PlotState,
     target: PlotPoint,
     geometry: PlotGeometry,
@@ -233,7 +233,17 @@ pub fn hover(
     let ranges = state.ranges.get_untracked();
     let hidden = state.hidden.get_untracked();
     let pixels = (geometry.data_width(), geometry.data_height());
-    let mut candidates = Vec::new();
+    let mut closest: Option<(f64, &'a str, usize, PlotPoint)> = None;
+    let mut consider = |series_id: &'a str, index, point: PlotPoint| {
+        let distance = ((point.x - target.x) / ranges.x.span() * pixels.0).powi(2)
+            + ((point.y - target.y) / ranges.y.span() * pixels.1).powi(2);
+        if closest
+            .as_ref()
+            .is_none_or(|(best, ..)| distance.total_cmp(best).is_lt())
+        {
+            closest = Some((distance, series_id, index, point));
+        }
+    };
     match data {
         PlotData::Time(set) => {
             for series in set
@@ -242,11 +252,7 @@ pub fn hover(
                 .filter(|series| !hidden.contains(series.id()))
             {
                 if let Some(index) = series.data().nearest(target, ranges, pixels, 12.0) {
-                    candidates.push(SeriesHit {
-                        series_id: series.id().into(),
-                        sample_index: index,
-                        point: series.data().samples()[index],
-                    });
+                    consider(series.id(), index, series.data().samples()[index]);
                 }
             }
         }
@@ -257,11 +263,7 @@ pub fn hover(
                 .filter(|series| !hidden.contains(series.id()))
             {
                 if let Some(index) = series.nearest(target, ranges, pixels, 12.0) {
-                    candidates.push(SeriesHit {
-                        series_id: series.id().into(),
-                        sample_index: index,
-                        point: series.samples()[index],
-                    });
+                    consider(series.id(), index, series.samples()[index]);
                 }
             }
         }
@@ -288,14 +290,14 @@ pub fn hover(
                         },
                     }
                 });
-            state.bin_hover.set(hit);
+            if state.bin_hover.with_untracked(|current| current != &hit) {
+                state.bin_hover.set(hit);
+            }
         }
     }
-    candidates.into_iter().min_by(|a, b| {
-        let distance = |hit: &SeriesHit| {
-            ((hit.point.x - target.x) / ranges.x.span() * pixels.0).powi(2)
-                + ((hit.point.y - target.y) / ranges.y.span() * pixels.1).powi(2)
-        };
-        distance(a).total_cmp(&distance(b))
+    closest.map(|(_, series_id, sample_index, point)| SeriesHit {
+        series_id: series_id.into(),
+        sample_index,
+        point,
     })
 }

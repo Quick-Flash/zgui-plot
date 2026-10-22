@@ -11,15 +11,19 @@ const MAX_EXACT: usize = 65_536;
 /// Prepare one extra viewport on each side so nearby pans reveal cached samples.
 /// Keep column density where possible and retain the existing geometry budget.
 pub fn pan_viewport(data: &SeriesData, x: Range, columns: usize, lod: Accuracy) -> SeriesData {
+    let padded = pan_range(x);
+    let scale = if padded == x { 1 } else { 3 };
+    viewport(data, padded, columns.saturating_mul(scale), lod)
+}
+
+pub(crate) fn pan_range(x: Range) -> Range {
     let span = x.span();
     let padded = Range::new(x.min - span, x.max + span);
-    let padded = if padded.min.is_finite() && padded.max.is_finite() && padded.span().is_finite() {
+    if padded.min.is_finite() && padded.max.is_finite() && padded.span().is_finite() {
         padded
     } else {
         x
-    };
-    let scale = if padded == x { 1 } else { 3 };
-    viewport(data, padded, columns.saturating_mul(scale), lod)
+    }
 }
 
 /// Viewport samples, including one neighbour each side for boundary segments.

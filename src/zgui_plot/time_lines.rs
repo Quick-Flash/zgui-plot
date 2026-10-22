@@ -1,7 +1,8 @@
 //! Background viewport preparation shared by all native time plots.
+use super::time_cache::{Plan, Prepared, Viewports, compatible, detail_plan, reusable};
 use crate::{
     PlotGeometry,
-    line_draw::{Connection, LineDraw, LinePattern, prepare},
+    line_draw::{LineDraw, LinePattern, prepare},
     plot_data::MarkerShape,
     series_samples::{Accuracy, pan_viewport},
     time_series::{SeriesData, TimeSeriesSet},
@@ -14,19 +15,6 @@ use zgui::{
     prelude::*,
     reactive::RenderEffect,
 };
-type Prepared = Vec<(String, SeriesData, SeriesData, Connection)>;
-type DrawKey = (Connection, LinePattern, u64);
-type Plan = (
-    Vec<(String, usize, DrawKey)>,
-    u64,
-    u64,
-    usize,
-    Lod,
-    (u64, u64, usize),
-);
-fn compatible(completed: &Plan, latest: &Plan) -> bool {
-    completed.0 == latest.0
-}
 
 pub(super) fn time_lines(
     series: Signal<TimeSeriesSet, LocalStorage>,
@@ -40,6 +28,22 @@ pub(super) fn time_lines(
     let generation = RwSignal::new_local(0_u64);
     let running = RwSignal::new_local(false);
     let cached_plan = StoredValue::new_local(None::<Plan>);
+    let history = StoredValue::new_local(Viewports::default());
+    let restore = move |request: &Plan| {
+        if cached_plan.with_value(|cached| {
+            cached
+                .as_ref()
+                .is_some_and(|cached| reusable(cached, request))
+        }) {
+            return true;
+        }
+        if let Some((plan, data)) = history.with_value(|history| history.find(request)) {
+            cached_plan.set_value(Some(plan));
+            prepared.set(data);
+            return true;
+        }
+        false
+    };
     let plan = Memo::new(move |_| {
         if !visible.get() {
             return None;
@@ -99,7 +103,12 @@ pub(super) fn time_lines(
         let request = plan.get();
         generation.update(|value| *value += 1);
         if request.is_none() {
+            cached_plan.set_value(None);
+            history.update_value(Viewports::clear);
             prepared.set(vec![]);
+        }
+        if request.as_ref().is_some_and(restore) {
+            return;
         }
         if running.get_untracked() {
             return;
@@ -111,11 +120,18 @@ pub(super) fn time_lines(
                     return;
                 };
                 let Some(request) = plan.get_untracked() else {
+                    cached_plan.set_value(None);
+                    history.update_value(Viewports::clear);
                     prepared.set(vec![]);
                     running.set(false);
                     return;
                 };
-                let (keys, min, max, columns, lod, view) = request.clone();
+                if restore(&request) {
+                    running.set(false);
+                    return;
+                }
+                let sampled = detail_plan(&request);
+                let (keys, min, max, columns, lod, view) = sampled.clone();
                 let old = cached_plan.get_value();
                 let cached = prepared.get_untracked();
                 let jobs = series.with_untracked(|set| {
@@ -141,7 +157,7 @@ pub(super) fn time_lines(
                         .collect::<Vec<_>>()
                 });
                 let x = crate::Range::new(f64::from_bits(min), f64::from_bits(max));
-                let data = blocking(move || {
+                let data: Prepared = blocking(move || {
                     jobs.into_iter()
                         .map(|(id, data, mode, reuse)| {
                             if let Some(reuse) = reuse {
@@ -188,8 +204,10 @@ pub(super) fn time_lines(
                 };
                 if let Some(latest) = plan.get_untracked()
                     && compatible(&request, &latest)
+                    && !restore(&latest)
                 {
-                    cached_plan.set_value(Some(request));
+                    history.update_value(|history| history.remember(sampled.clone(), data.clone()));
+                    cached_plan.set_value(Some(sampled));
                     prepared.set(data);
                 }
                 if current == version {
@@ -291,6 +309,215 @@ pub(super) fn time_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::line_draw::Connection;
+    #[test]
+    fn pan_keeps_retained_geometry_and_hidden_plots_rebuild_when_shown() {
+        use std::{
+            cell::RefCell,
+            rc::Rc,
+            time::{Duration, Instant},
+        };
+        use zgui::render::Renderer;
+        let built = Rc::new(RefCell::new(None));
+        let model = Rc::clone(&built);
+        let handler = app()
+            .with_size(900., 600.)
+            .with_renderer(Box::new(|_, target| {
+                let mut renderer = zgui_testkit_scene::CaptureRenderer::new();
+                renderer.configure(target);
+                Ok(Box::new(renderer))
+            }))
+            .into_handler(move || {
+                let state = PlotState::default();
+                state
+                    .ranges
+                    .set(crate::Ranges::new((100., 200.), (-1., 1.)));
+                let visible = RwSignal::new_local(true);
+                let geometry =
+                    Memo::new(move |_| PlotGeometry::with_bounds(0., 0., 800., 500., 800., 500.));
+                let data = SeriesData::new(
+                    (0..1_000_000)
+                        .map(|i| crate::PlotPoint {
+                            x: i as f64 / 1000.,
+                            y: (i as f64 / 50.).sin(),
+                        })
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap();
+                let set =
+                    TimeSeriesSet::new(vec![crate::time_series::TimeSeries::new("a", "a", data)])
+                        .unwrap();
+                let handle = CanvasHandle::new();
+                time_lines(
+                    Signal::stored_local(set),
+                    state,
+                    Signal::stored_local(BTreeMap::new()),
+                    geometry,
+                    visible.into(),
+                    handle.clone(),
+                );
+                let view_handle = handle.clone();
+                redraw_on_change(move || {
+                    show_ranges(&view_handle, geometry.get().unwrap(), state.ranges.get())
+                });
+                let initial = handle.scene().revision();
+                *model.borrow_mut() = Some((state, visible, handle.clone(), initial));
+                zgui::elements::canvas().scene(&handle).into_view()
+            })
+            .unwrap();
+        let mut harness = zgui_platform_headless::Harness::new(handler.into_runtime());
+        harness.settle(16);
+        let (state, visible, handle, initial) = built.borrow().as_ref().unwrap().clone();
+        let wait = |harness: &mut zgui_platform_headless::Harness<zgui::runtime::Runtime>,
+                    revision| {
+            let start = Instant::now();
+            while handle.scene().revision() <= revision {
+                assert!(
+                    start.elapsed() < Duration::from_secs(10),
+                    "Viewport preparation timed out"
+                );
+                harness.settle(16);
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            harness.settle(16);
+        };
+        wait(&mut harness, initial);
+        let revision = handle.scene().revision();
+        let view = handle.scene().view();
+        let started = Instant::now();
+        for step in 1..=50 {
+            let offset = step as f64;
+            state.ranges.set(crate::Ranges::new(
+                (100. + offset, 200. + offset),
+                (-1., 1.),
+            ));
+            harness.settle(16);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        harness.settle(32);
+        eprintln!(
+            "50 dense pans: {:?}, geometry rebuilds {}",
+            started.elapsed(),
+            handle.scene().revision() - revision
+        );
+        assert_eq!(
+            handle.scene().revision(),
+            revision,
+            "Nearby pans must retain prepared buffers"
+        );
+        assert!(
+            handle.scene().view() > view,
+            "Pan still updates viewport transform"
+        );
+        let vertices = || {
+            let scene = zgui::canvas::resolve(handle.scene().token()).unwrap();
+            let scene = scene.lock().unwrap();
+            match &scene.series()[0].series {
+                zgui::canvas::Series::Line { data, .. } => data.clone(),
+                _ => panic!("Expected retained line"),
+            }
+        };
+        let original_vertices = vertices();
+        state
+            .ranges
+            .set(crate::Ranges::new((125., 175.), (-1., 1.)));
+        harness.settle(32);
+        assert_eq!(
+            handle.scene().revision(),
+            revision,
+            "Small zoom-in retains full requested density"
+        );
+        state
+            .ranges
+            .set(crate::Ranges::new((140., 160.), (-1., 1.)));
+        wait(&mut harness, revision);
+        let zoomed = handle.scene().revision();
+        assert!(zoomed > revision, "Zoom in rebuilds at higher density");
+        state
+            .ranges
+            .set(crate::Ranges::new((100., 200.), (-1., 1.)));
+        harness.settle(32);
+        assert!(
+            std::sync::Arc::ptr_eq(&original_vertices, &vertices()),
+            "Returning to recent zoom level restores original buffer"
+        );
+        visible.set(false);
+        harness.settle(32);
+        let hidden = handle.scene().revision();
+        visible.set(true);
+        wait(&mut harness, hidden);
+        assert!(
+            handle.scene().revision() > hidden,
+            "Showing a hidden plot restores cleared geometry"
+        );
+    }
+    #[test]
+    fn padded_pan_cache_reuses_coverage_without_losing_zoom_detail() {
+        let original = (
+            vec![(
+                "sample".into(),
+                123,
+                (Connection::Linear, LinePattern::Solid, 0),
+            )],
+            100.0_f64.to_bits(),
+            200.0_f64.to_bits(),
+            1000,
+            Lod::Columns,
+            (0, 0, 0),
+        );
+        let mut next = original.clone();
+        for step in 0..=100 {
+            next.1 = (100.0 + step as f64).to_bits();
+            next.2 = (200.0 + step as f64).to_bits();
+            assert!(reusable(&original, &next));
+        }
+        next.1 = 201.0_f64.to_bits();
+        next.2 = 301.0_f64.to_bits();
+        assert!(
+            !reusable(&original, &next),
+            "Never slide cache anchor without new samples"
+        );
+        next = original.clone();
+        next.2 = 150.0_f64.to_bits();
+        assert!(!reusable(&original, &next), "Zoom in needs denser samples");
+        next = original.clone();
+        next.1 = 50.0_f64.to_bits();
+        next.2 = 250.0_f64.to_bits();
+        assert!(
+            reusable(&original, &next),
+            "Zoom out can use denser cached samples"
+        );
+        next = original.clone();
+        next.3 = 2000;
+        assert!(
+            !reusable(&original, &next),
+            "Wider plot needs denser samples"
+        );
+        next = original.clone();
+        next.0[0].1 = 456;
+        assert!(
+            !reusable(&original, &next),
+            "New source data invalidates cache"
+        );
+        next = original.clone();
+        next.0[0].2.0 = Connection::Post;
+        assert!(
+            !reusable(&original, &next),
+            "Connection changes invalidate cache"
+        );
+        let mut patterned = original.clone();
+        patterned.0[0].2.1 = LinePattern::Dashed;
+        next = patterned.clone();
+        next.1 = 101.0_f64.to_bits();
+        next.2 = 201.0_f64.to_bits();
+        assert!(
+            !reusable(&patterned, &next),
+            "Pattern spacing stays tied to pixels"
+        );
+        next = original.clone();
+        next.4 = Lod::Exact;
+        assert!(!reusable(&original, &next));
+    }
     #[test]
     fn continuous_pan_keeps_completed_work_but_source_changes_reject_it() {
         let completed = (

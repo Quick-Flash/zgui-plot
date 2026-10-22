@@ -1,11 +1,14 @@
 //! Shared plot state, chrome, annotations, and scatter/histogram components.
 pub mod annotations;
 mod histogram;
+#[cfg(test)]
+mod hover_tests;
 mod plot;
 mod render;
 mod scatter;
 mod state;
 pub mod theme;
+mod time_cache;
 mod time_lines;
 pub mod view_state;
 pub use histogram::*;

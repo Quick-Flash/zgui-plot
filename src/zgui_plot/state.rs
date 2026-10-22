@@ -47,14 +47,25 @@ impl Default for PlotState {
     }
 }
 impl PlotState {
+    pub(super) fn set_hover(self, hit: Option<SeriesHit>) {
+        if self.hover.with_untracked(|current| current != &hit) {
+            self.hover.set(hit);
+        }
+    }
     pub fn set_view(self, ranges: Ranges) -> Result<(), String> {
         if crate::range::valid(ranges.x).is_none() || crate::range::valid(ranges.y).is_none() {
             return Err("Both axes need finite, increasing bounds".into());
         }
-        self.auto_fit.set(false);
-        self.ranges.set(ranges);
-        self.hover.set(None);
-        self.bin_hover.set(None);
+        if self.auto_fit.get_untracked() {
+            self.auto_fit.set(false);
+        }
+        if self.ranges.get_untracked() != ranges {
+            self.ranges.set(ranges);
+        }
+        self.set_hover(None);
+        if self.bin_hover.with_untracked(Option::is_some) {
+            self.bin_hover.set(None);
+        }
         Ok(())
     }
     /// Fit only requested axes once; keep other axis and disable continuous auto-fit.
@@ -113,8 +124,10 @@ impl PlotState {
             &self.hidden.get_untracked(),
             self.histogram.get_untracked().bins,
         ));
-        self.hover.set(None);
-        self.bin_hover.set(None);
+        self.set_hover(None);
+        if self.bin_hover.with_untracked(Option::is_some) {
+            self.bin_hover.set(None);
+        }
     }
     pub fn style(self, id: &str) -> SeriesStyle {
         self.styles.with(|styles| {

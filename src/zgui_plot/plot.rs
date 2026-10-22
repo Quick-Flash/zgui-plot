@@ -422,7 +422,9 @@ pub fn DataPlot(
             }
             return;
         };
-        cursor.set(Some(position));
+        if cursor.get_untracked() != Some(position) {
+            cursor.set(Some(position));
+        }
         let Some(geometry) = geometry.get_untracked() else {
             return;
         };
@@ -433,7 +435,7 @@ pub fn DataPlot(
         };
         let current = series.get_untracked();
         let hit = render::hover(&current, state, target, geometry);
-        state.hover.set(hit);
+        state.set_hover(hit);
     });
     let surface_interaction = crate::zgui_surface::SurfaceInteraction {
         geometry: UnsyncCallback::new(move |()| geometry.get()),

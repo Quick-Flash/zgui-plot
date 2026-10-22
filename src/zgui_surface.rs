@@ -7,6 +7,8 @@
 //!
 //! Include [`stylesheet`] once in the app stylesheet for the surface layout.
 
+mod hover;
+
 use crate::zgui_link::{PlotLinks, linked_pointer_path};
 use zgui::prelude::*;
 use zgui::reactive::{Callable, UnsyncCallback};
@@ -163,7 +165,7 @@ pub fn PlotSurface(
         links.bind(ranges, on_update);
     }
     let hover_callback = on_hover;
-    let on_hover = UnsyncCallback::new(move |event: PlotHover| {
+    let on_hover = hover::coalesced(UnsyncCallback::new(move |event: PlotHover| {
         if let Some(links) = links {
             let point = match event {
                 PlotHover::At((x, y)) => geometry.run(()).and_then(|geometry| {
@@ -183,7 +185,7 @@ pub fn PlotSurface(
             links.publish_pointer(point);
         }
         hover_callback.run(event);
-    });
+    }));
     let linked_canvas = zgui::elements::canvas()
         .class("plot-linked-pointer")
         .draw(move |cx| {
