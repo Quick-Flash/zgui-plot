@@ -66,6 +66,14 @@ checkboxes plus All. Group docking and pane-local guides remain available.
 
 Line settings support solid, dashed, dotted, dash-dot, and markers-only rendering. Patterns and sample markers can be edited for multiple selected lines; choosing line type None enables markers. Pattern preparation runs on background workers with bounded geometry and exports through the same retained scene.
 
+`line_pattern::prepare_path` is the shared, backend-neutral pattern engine for
+sampled paths in any coordinate order. It preserves loops, vertical segments and
+missing-data gaps while sharing clipping, dash phase, spacing and geometry
+limits with time plots. `line_pattern::prepare` keeps the existing `SeriesData`
+API as a thin adapter. Consumers choose their own sampling policy before calling
+the engine: time plots can reduce sorted columns, while XY paths can use
+screen-distance reduction without reordering their samples.
+
 ## Features
 
 | Feature | Provides |

@@ -15,12 +15,37 @@ pub fn prepare(
     if pattern == LinePattern::Solid {
         return data.clone();
     }
-    if pattern == LinePattern::None {
-        return SeriesData::new(vec![]).unwrap();
+    SeriesData::new(prepare_path(data.samples(), ranges, pixels, pattern, width))
+        .expect("time-series pattern adapter retains ordered timestamps")
+}
+
+/// Build pixel-spaced patterns along an already sampled path, preserving input order.
+///
+/// X may increase, decrease, or repeat. Nonfinite points break the path. Output
+/// runs are separated by NaN Y values; their X remains finite so sorted input
+/// can still be adapted to `SeriesData`. No sorting or time-series reduction is
+/// performed here: callers choose sampling appropriate to their coordinate domain.
+/// Clipping, dash phase, width-relative spacing, and the dash budget are shared
+/// by time-series and arbitrary XY renderers. One viewport of overscan each side
+/// allows consumers to retain this geometry while panning nearby.
+pub fn prepare_path(
+    points: &[PlotPoint],
+    ranges: Ranges,
+    pixels: (f64, f64),
+    pattern: LinePattern,
+    width: f64,
+) -> Vec<PlotPoint> {
+    match pattern {
+        LinePattern::Solid => return points.to_vec(),
+        LinePattern::None => return Vec::new(),
+        _ => {}
     }
     let (w, h) = pixels;
-    if !(w > 0.0 && h > 0.0) {
-        return SeriesData::new(vec![]).unwrap();
+    if ![w, h, ranges.x.span(), ranges.y.span(), width]
+        .into_iter()
+        .all(|value| value.is_finite() && value > 0.)
+    {
+        return Vec::new();
     }
     let map = |p: PlotPoint| {
         Point::new(
@@ -35,7 +60,7 @@ pub fn prepare(
     let mut segments = Vec::new();
     let mut previous = None;
     let mut total = 0.0;
-    for pair in data.samples().windows(2) {
+    for pair in points.windows(2) {
         let (a, b) = (map(pair[0]), map(pair[1]));
         let Some((a, b)) = clip(a, b, (-w, 2.0 * w, -h, 2.0 * h)) else {
             previous = None;
@@ -56,7 +81,7 @@ pub fn prepare(
         LinePattern::DashDot => &[6.0, 3.0, 0.05, 3.0],
         _ => unreachable!(),
     };
-    let unit = width.clamp(0.5, 20.0);
+    let unit = width.max(0.5);
     let period = lengths.iter().sum::<f64>() * unit;
     let scale = (total / (period * 16_384.0)).max(1.0) * unit;
     let mut index = 0;
@@ -105,7 +130,7 @@ pub fn prepare(
             }
         }
     }
-    SeriesData::new(out).expect("patterns retain ordered timestamps")
+    out
 }
 
 fn clip(
@@ -138,6 +163,98 @@ fn clip(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn arbitrary_paths_keep_loops_vertical_segments_and_gaps() {
+        let points = [
+            PlotPoint { x: 0., y: 0. },
+            PlotPoint { x: 10., y: 0. },
+            PlotPoint { x: 10., y: 10. },
+            PlotPoint { x: 0., y: 10. },
+            PlotPoint {
+                x: f64::NAN,
+                y: f64::NAN,
+            },
+            PlotPoint { x: 8., y: 5. },
+            PlotPoint { x: 1., y: 5. },
+        ];
+        assert!(
+            SeriesData::new(points.to_vec()).is_err(),
+            "This path is deliberately outside the time-series domain"
+        );
+        let path = prepare_path(
+            &points,
+            Ranges::new((0., 10.), (0., 10.)),
+            (100., 100.),
+            LinePattern::Dashed,
+            1.,
+        );
+        let segments = path
+            .windows(2)
+            .filter(|pair| pair[0].y.is_finite() && pair[1].y.is_finite())
+            .collect::<Vec<_>>();
+        assert!(
+            segments
+                .iter()
+                .any(|pair| pair[0].x == 10. && pair[1].x == 10. && pair[1].y > pair[0].y)
+        );
+        assert!(segments.iter().any(|pair| pair[1].x < pair[0].x));
+        assert!(
+            segments
+                .iter()
+                .all(|pair| pair[0].x == pair[1].x || pair[0].y == pair[1].y),
+            "Separate XY runs must not be bridged"
+        );
+    }
+
+    #[test]
+    fn pattern_gaps_scale_with_thick_strokes_in_both_adapters() {
+        let points = [PlotPoint { x: 0., y: 0. }, PlotPoint { x: 1000., y: 0. }];
+        let data = SeriesData::new(points.to_vec()).unwrap();
+        let ranges = Ranges::new((0., 1000.), (-1., 1.));
+        for pattern in [
+            LinePattern::Dashed,
+            LinePattern::Dotted,
+            LinePattern::DashDot,
+        ] {
+            for width in [1., 10., 32.] {
+                let path = prepare_path(&points, ranges, (1000., 100.), pattern, width);
+                let first_break = path.iter().position(|point| point.y.is_nan()).unwrap();
+                let gap = path[first_break + 1].x - path[first_break - 1].x;
+                assert!(
+                    (gap - 3. * width).abs() < 1e-9,
+                    "Gaps must remain wider than the stroke caps"
+                );
+                let time = prepare(&data, ranges, (1000., 100.), pattern, width);
+                assert_eq!(time.samples().len(), path.len());
+                for (a, b) in time.samples().iter().zip(path) {
+                    assert_eq!(a.x, b.x);
+                    assert!(a.y == b.y || (a.y.is_nan() && b.y.is_nan()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn solid_none_clipping_and_invalid_geometry_work_without_sorted_x() {
+        let points = [PlotPoint { x: 20., y: 2. }, PlotPoint { x: -20., y: 2. }];
+        let ranges = Ranges::new((0., 10.), (0., 10.));
+        assert_eq!(
+            prepare_path(&points, ranges, (100., 100.), LinePattern::Solid, 1.),
+            points
+        );
+        assert!(prepare_path(&points, ranges, (100., 100.), LinePattern::None, 1.).is_empty());
+        let clipped = prepare_path(&points, ranges, (100., 100.), LinePattern::Dashed, 1.);
+        assert!(
+            clipped
+                .iter()
+                .all(|point| point.x >= -10. && point.x <= 20.)
+        );
+        assert!(
+            prepare_path(&points, ranges, (f64::NAN, 100.), LinePattern::Dashed, 1.).is_empty()
+        );
+        assert!(prepare_path(&points, ranges, (100., 0.), LinePattern::Dashed, 1.).is_empty());
+    }
+
     #[test]
     fn patterns_have_pixel_spacing_and_none_has_no_line() {
         let data = SeriesData::new(vec![
