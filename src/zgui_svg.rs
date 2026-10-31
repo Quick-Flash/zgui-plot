@@ -143,6 +143,11 @@ pub fn scenes_to_svg(
                     } else {
                         attrs.push_str(" stroke=\"none\"");
                     }
+                    if scene.transform() != kurbo::Affine::IDENTITY {
+                        let [a, b, c, d, e, f] = scene.transform().as_coeffs();
+                        write!(attrs, " transform=\"matrix({a} {b} {c} {d} {e} {f})\"")
+                            .expect("writing to String cannot fail");
+                    }
                     write!(body, "<path d=\"{}\"{attrs}/>", shape.path.to_svg())
                         .expect("writing to String cannot fail");
                 }
