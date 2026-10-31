@@ -36,6 +36,11 @@ impl PlotPointer {
         }
     }
 
+    /// Constrain selection rectangles to a pixel aspect ratio, or allow free selection.
+    pub fn set_selection_aspect(&self, aspect: Option<f64>) {
+        self.update(|controller| controller.selection_aspect = aspect);
+    }
+
     /// Gesture a press would start where the pointer last hovered (reactive).
     pub fn hint(&self) -> Option<Gesture> {
         self.hint.get()

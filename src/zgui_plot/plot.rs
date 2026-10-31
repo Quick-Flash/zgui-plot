@@ -46,6 +46,8 @@ pub struct PlotOptions {
     pub show_legend: bool,
     pub show_pointer: bool,
     pub show_cursor_values: bool,
+    /// Match Shift-zoom rectangles to the viewport aspect, preserving equal units.
+    pub lock_selection_aspect: Signal<bool, LocalStorage>,
 }
 impl Default for PlotOptions {
     fn default() -> Self {
@@ -61,6 +63,7 @@ impl Default for PlotOptions {
             show_legend: true,
             show_pointer: true,
             show_cursor_values: true,
+            lock_selection_aspect: Signal::stored_local(false),
         }
     }
 }
@@ -85,6 +88,7 @@ pub fn DataPlot(
         show_legend,
         show_pointer,
         show_cursor_values,
+        lock_selection_aspect,
     } = options;
 
     let snapshot_layers = crate::zgui_svg::SnapshotLayers::current_or_new();
@@ -162,6 +166,15 @@ pub fn DataPlot(
         },
         Axes::BOTH,
     );
+    let selection_sync = zgui::reactive::RenderEffect::new(move |_| {
+        let aspect = if lock_selection_aspect.get() {
+            geometry.get().map(|g| g.data_width() / g.data_height())
+        } else {
+            None
+        };
+        pointer.set_selection_aspect(aspect);
+    });
+    on_cleanup_local(move || drop(selection_sync));
     let fit_before_drag = StoredValue::new_local(state.auto_fit.get_untracked());
     let cursor = RwSignal::new_local(None::<(f64, f64)>);
     redraw_on_change(move || {
