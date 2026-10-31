@@ -226,3 +226,8 @@ Custom `PlotSurface` consumers pass required geometry/range callbacks through
 `SurfaceInteraction`, and optional display/gesture settings through
 `SurfaceOptions`. `LegendItem` groups marker and colors in `LegendAppearance`.
 This replaces oversized argument lists without Clippy suppressions.
+
+`PlotOptions::lock_selection_aspect` constrains Shift-zoom rectangles to the data
+viewport's width/height ratio, so equal-unit views zoom to the rectangle shown.
+It defaults to false. Lower-level consumers can set `Controller::selection_aspect`
+or call `PlotPointer::set_selection_aspect` to choose a pixel aspect ratio.
