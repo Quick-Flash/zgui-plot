@@ -306,6 +306,9 @@ pub struct Controller {
     pub axes: Axes,
     /// Box selections thinner than this, in pixels, do not zoom.
     pub min_box: f64,
+    /// Optional width/height ratio of the selection rectangle, in pixels.
+    /// Only applies when both axes can zoom; the same box is shown and applied.
+    pub selection_aspect: Option<f64>,
     drag: Option<Drag>,
     last_click: Option<(Instant, (f64, f64))>,
 }
@@ -317,6 +320,7 @@ impl Controller {
             zones,
             axes,
             min_box: 4.0,
+            selection_aspect: None,
             drag: None,
             last_click: None,
         }
@@ -389,6 +393,37 @@ impl Controller {
         } else {
             (geometry.top, geometry.bottom)
         };
+        let start = (x(drag.start.0), y(drag.start.1));
+        if self.axes.x
+            && self.axes.y
+            && let Some(aspect) = self
+                .selection_aspect
+                .filter(|value| value.is_finite() && *value > 0.)
+        {
+            let dx = x(drag.current.0) - start.0;
+            let dy = y(drag.current.1) - start.1;
+            let sx = if dx < 0. { -1. } else { 1. };
+            let sy = if dy < 0. { -1. } else { 1. };
+            let available_x = if sx < 0. {
+                start.0 - geometry.left
+            } else {
+                geometry.right - start.0
+            };
+            let available_y = if sy < 0. {
+                start.1 - geometry.top
+            } else {
+                geometry.bottom - start.1
+            };
+            let width = dx
+                .abs()
+                .max(dy.abs() * aspect)
+                .min(available_x)
+                .min(available_y * aspect);
+            return Some((
+                (start.0, start.0 + sx * width),
+                (start.1, start.1 + sy * width / aspect),
+            ));
+        }
         Some(((x(drag.start.0), x(drag.current.0)), rows))
     }
 
@@ -754,6 +789,37 @@ mod tests {
         };
         let zoomed = update.apply(ranges);
         assert!((zoomed.x.min - 2.0).abs() < 1e-9 && (zoomed.y.min - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn aspect_locked_selection_matches_applied_zoom_in_every_direction() {
+        let g = PlotGeometry::with_bounds(0., 0., 400., 200., 400., 200.).unwrap();
+        let ranges = Ranges::new((0., 20.), (0., 10.));
+        for pointer in [
+            (300., 110.),
+            (100., 110.),
+            (300., 90.),
+            (100., 90.),
+            (400., 200.),
+        ] {
+            let mut controller = Controller::new(HitZones::default(), Axes::BOTH);
+            controller.selection_aspect = Some(2.);
+            controller.press((200., 100.), g, ranges, true);
+            controller.drag_to(pointer, g);
+            let ((x0, x1), (y0, y1)) = controller.selection(g).unwrap();
+            assert!(((x1 - x0).abs() / (y1 - y0).abs() - 2.).abs() < 1e-9);
+            assert!((0.0..=400.).contains(&x1) && (0.0..=200.).contains(&y1));
+            let Release::Zoom(update) = controller.release(Instant::now(), true, g) else {
+                panic!("Selection must zoom");
+            };
+            let zoomed = update.apply(ranges);
+            assert!((zoomed.x.span() / zoomed.y.span() - 2.).abs() < 1e-9);
+            assert!((zoomed.x.span() - (x1 - x0).abs() / 400. * 20.).abs() < 1e-9);
+        }
+        let mut controller = Controller::new(HitZones::default(), Axes::BOTH);
+        controller.press((200., 100.), g, ranges, true);
+        controller.drag_to((300., 110.), g);
+        assert_eq!(controller.selection(g), Some(((200., 300.), (100., 110.))));
     }
 
     #[test]
