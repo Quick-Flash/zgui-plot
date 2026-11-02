@@ -231,3 +231,18 @@ This replaces oversized argument lists without Clippy suppressions.
 viewport's width/height ratio, so equal-unit views zoom to the rectangle shown.
 It defaults to false. Lower-level consumers can set `Controller::selection_aspect`
 or call `PlotPointer::set_selection_aspect` to choose a pixel aspect ratio.
+
+### Retained time bands
+
+`zgui_time_bands::RetainedTimeBands` draws full-height intervals behind a plot.
+Group disjoint, chronologically sorted intervals with the same paint in a
+`TimeBandBatch`. Keep overlapping layers in separate batches, in paint order.
+Mount `bands.handle()` in a canvas clipped to the data area, and register that
+handle with `zgui_svg` when exporting the plot.
+
+Call `replace` when the intervals or paints change and `show(x_range, width,
+height)` when the view changes. Nearby pans and zooms reuse padded interval
+buffers; fill height and one-pixel boundaries stay in CSS pixels. Panning
+inside a uniform state leaves the canvas unchanged. Data changes, resize,
+or leaving prepared coverage rebuild the buffers. This avoids unnecessary
+background updates; moving a visible transition still requires repainting.

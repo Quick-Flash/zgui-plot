@@ -97,6 +97,10 @@ pub mod zgui_pointer;
 #[cfg(feature = "zgui")]
 pub mod zgui_renderer;
 
+/// Retained full-height interval backgrounds.
+#[cfg(feature = "zgui")]
+pub mod zgui_time_bands;
+
 #[cfg(feature = "zgui")]
 pub mod zgui_surface;
 
