@@ -1,9 +1,10 @@
 //! Retained full-height time bands for a plot background.
 
 use crate::Range;
+use kurbo::Shape;
 use std::sync::Arc;
 use zgui::{
-    canvas::{Brush, Series, zgui_color::Color},
+    canvas::{Brush, Series, ShapeBuilder, zgui_color::Color},
     elements::canvas::CanvasHandle,
 };
 
@@ -87,11 +88,10 @@ impl RetainedTimeBands {
                 scene.clear();
                 for (batch, visible) in self.batches.iter().zip(&signature) {
                     if visible.is_some() && batch.opacity > 0. {
-                        line(
-                            scene,
-                            vec![[0., height as f32 / 2.], [width as f32, height as f32 / 2.]],
-                            color(batch, batch.opacity),
-                            height,
+                        scene.push(
+                            ShapeBuilder::new(kurbo::Rect::new(0., 0., width, height).to_path(0.1))
+                                .fill(Brush::Solid(color(batch, batch.opacity)))
+                                .build(),
                         );
                     }
                 }
@@ -114,21 +114,28 @@ impl RetainedTimeBands {
                     if batch.opacity <= 0. {
                         continue;
                     }
-                    let mut points = Vec::new();
+                    let mut path = kurbo::BezPath::new();
                     for [start, end] in visible(batch, coverage) {
-                        points.extend([
-                            [
-                                (start.max(coverage.min) - coverage.min) as f32,
-                                height as f32 / 2.,
-                            ],
-                            [
-                                (end.min(coverage.max) - coverage.min) as f32,
-                                height as f32 / 2.,
-                            ],
-                            [f32::NAN, f32::NAN],
-                        ]);
+                        path.extend(
+                            kurbo::Rect::new(
+                                start.max(coverage.min) - coverage.min,
+                                0.,
+                                end.min(coverage.max) - coverage.min,
+                                height,
+                            )
+                            .to_path(0.1)
+                            .elements()
+                            .iter()
+                            .copied(),
+                        );
                     }
-                    line(scene, points, color(batch, batch.opacity), height);
+                    if !path.is_empty() {
+                        scene.push(
+                            ShapeBuilder::new(path)
+                                .fill(Brush::Solid(color(batch, batch.opacity)))
+                                .build(),
+                        );
+                    }
                 }
                 for batch in &self.batches {
                     if !batch.boundaries || batch.opacity <= 0. {
@@ -205,7 +212,8 @@ mod tests {
         let handle = bands.handle().scene().clone();
         let revision = handle.revision();
         let scene = zgui::canvas::resolve(handle.token()).unwrap();
-        let data = match &scene.lock().unwrap().series()[0].series {
+        let path = scene.lock().unwrap().shapes()[0].path.clone();
+        let edge_data = match &scene.lock().unwrap().series()[0].series {
             Series::Line { data, .. } => data.clone(),
             _ => unreachable!(),
         };
@@ -214,19 +222,11 @@ mod tests {
         }
         assert_eq!(handle.revision(), revision);
         let held = scene.lock().unwrap();
-        let Series::Line {
-            data: after,
-            stroke,
-            ..
-        } = &held.series()[0].series
-        else {
+        assert!(Arc::ptr_eq(&path, &held.shapes()[0].path));
+        let Series::Line { data, stroke, .. } = &held.series()[0].series else {
             panic!()
         };
-        assert!(Arc::ptr_eq(&data, after));
-        assert_eq!(stroke.width, 300.);
-        let Series::Line { stroke, .. } = &held.series()[1].series else {
-            panic!()
-        };
+        assert!(Arc::ptr_eq(&edge_data, data));
         assert_eq!(stroke.width, 1.);
         drop(held);
         bands.show((100., 110.).into(), 800., 300.);
