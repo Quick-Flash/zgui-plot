@@ -16,23 +16,43 @@ pub(super) type Plan = (
     (u64, u64, usize),
 );
 pub(super) fn compatible(completed: &Plan, latest: &Plan) -> bool {
-    completed.0 == latest.0
+    reusable(completed, latest)
 }
 
 pub(super) fn reusable(completed: &Plan, latest: &Plan) -> bool {
     if completed == latest {
         return true;
     }
-    if completed.0 != latest.0 || completed.4 != latest.4 || completed.5 != latest.5 {
+    if completed.0 != latest.0 || completed.4 != latest.4 {
         return false;
     }
-    // Pixel-spaced patterns must be rebuilt when either axis or plot size changes.
+    // Pixel-spaced geometry survives translation while scale and overscan stay
+    // valid. Reusing it preserves both dash phase and GPU buffer identity.
     if completed
         .0
         .iter()
         .any(|(_, _, (_, pattern, _))| !matches!(pattern, LinePattern::Solid | LinePattern::None))
     {
-        return false;
+        let old_x = crate::Range::new(f64::from_bits(completed.1), f64::from_bits(completed.2));
+        let next_x = crate::Range::new(f64::from_bits(latest.1), f64::from_bits(latest.2));
+        let old_y = crate::Range::new(f64::from_bits(completed.5.0), f64::from_bits(completed.5.1));
+        let next_y = crate::Range::new(f64::from_bits(latest.5.0), f64::from_bits(latest.5.1));
+        return [
+            (old_x, next_x, completed.3, latest.3),
+            (old_y, next_y, completed.5.2, latest.5.2),
+        ]
+        .into_iter()
+        .all(|(old, next, pixels, next_pixels)| {
+            let scale = pixels as f64 / old.span();
+            let next_scale = next_pixels as f64 / next.span();
+            scale.is_finite()
+                && scale > 0.
+                && next_scale.is_finite()
+                && next_scale > 0.
+                && (scale - next_scale).abs() <= scale * 1e-9
+                && next.min >= old.min - old.span() * 0.75
+                && next.max <= old.max + old.span() * 0.75
+        });
     }
     let old = crate::Range::new(f64::from_bits(completed.1), f64::from_bits(completed.2));
     let next = crate::Range::new(f64::from_bits(latest.1), f64::from_bits(latest.2));
@@ -150,5 +170,38 @@ mod tests {
         assert!(cache.find(&request()).is_none());
         cache.clear();
         assert!(cache.0.is_empty());
+    }
+
+    #[test]
+    fn patterned_pans_reuse_only_matching_pixel_scale_and_prepared_coverage() {
+        for pattern in [
+            LinePattern::Dashed,
+            LinePattern::Dotted,
+            LinePattern::DashDot,
+        ] {
+            let mut old = request();
+            old.0[0].2.1 = pattern;
+            old.5 = ((-1_f64).to_bits(), 1_f64.to_bits(), 500);
+            let mut next = old.clone();
+            next.1 = 120_f64.to_bits();
+            next.2 = 220_f64.to_bits();
+            next.5 = ((-0.5_f64).to_bits(), 1.5_f64.to_bits(), 500);
+            assert!(reusable(&old, &next));
+            next.2 = 170_f64.to_bits();
+            assert!(!reusable(&old, &next), "X zoom changes dash spacing");
+            next = old.clone();
+            next.5.1 = 0_f64.to_bits();
+            assert!(!reusable(&old, &next), "Y zoom changes dash spacing");
+            next = old.clone();
+            next.1 = 1000_f64.to_bits();
+            next.2 = 1100_f64.to_bits();
+            assert!(!reusable(&old, &next), "Distant pans need fresh geometry");
+            next = old.clone();
+            next.3 += 100;
+            assert!(!reusable(&old, &next), "Resize changes pixel scale");
+            next = old.clone();
+            next.0[0].2.2 = 8_f64.to_bits();
+            assert!(!reusable(&old, &next), "Width changes need fresh patterns");
+        }
     }
 }

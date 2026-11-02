@@ -64,6 +64,8 @@ pub mod overlay;
 pub mod palette;
 mod path;
 pub mod plot_data;
+#[cfg(feature = "zgui")]
+pub mod preparation;
 pub mod range;
 pub mod series_samples;
 pub mod time_series;
