@@ -451,8 +451,8 @@ pub fn DataPlot(
         state.set_hover(hit);
     });
     let surface_interaction = crate::zgui_surface::SurfaceInteraction {
-        geometry: UnsyncCallback::new(move |()| geometry.get()),
-        ranges: UnsyncCallback::new(move |()| state.ranges.get()),
+        geometry: UnsyncCallback::new(move |()| geometry.get_untracked()),
+        ranges: UnsyncCallback::new(move |()| state.ranges.get_untracked()),
         on_update: UnsyncCallback::new(move |update| {
             state.apply(update);
             cursor.set(None);
