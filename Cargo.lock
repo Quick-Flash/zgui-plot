@@ -5670,10 +5670,12 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "kurbo",
+ "reactive_graph",
  "resvg",
  "windows-sys 0.61.2",
  "zgui",
  "zgui-platform-headless",
+ "zgui-profile",
  "zgui-testkit-scene",
  "zgui-ui",
  "zgui-ui-tokens",

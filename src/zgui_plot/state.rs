@@ -129,13 +129,19 @@ impl PlotState {
             self.bin_hover.set(None);
         }
     }
+    /// Read current style, subscribing when called inside a reactive observer.
     pub fn style(self, id: &str) -> SeriesStyle {
-        self.styles.with(|styles| {
+        let lookup = |styles: &BTreeMap<String, SeriesStyle>| {
             styles
                 .get(id)
                 .copied()
                 .unwrap_or_else(|| SeriesStyle::for_id(id))
-        })
+        };
+        if reactive_graph::graph::Observer::get().is_some() {
+            self.styles.with(lookup)
+        } else {
+            self.styles.with_untracked(lookup)
+        }
     }
     pub fn apply(self, update: RangeUpdate) {
         let next = update.apply(self.ranges.get_untracked());
