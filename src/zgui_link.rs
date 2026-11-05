@@ -74,12 +74,12 @@ impl PlotLinks {
 
     pub(crate) fn bind(
         self,
-        ranges: UnsyncCallback<(), Ranges>,
+        tracked_ranges: UnsyncCallback<(), Ranges>,
         apply: UnsyncCallback<RangeUpdate>,
     ) {
         let tracker = StoredValue::new_local(std::cell::RefCell::new(Tracker::default()));
         let effect = RenderEffect::new(move |_| {
-            let local = ranges.run(());
+            let local = tracked_ranges.run(());
             let options = self.options.get();
             let shared = self.group.bounds.get();
             let (target, next) = tracker.with_value(|tracker| {

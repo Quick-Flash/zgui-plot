@@ -66,6 +66,8 @@ pub struct SurfaceInteraction {
     pub geometry: UnsyncCallback<(), Option<PlotGeometry>>,
     /// Ranges currently shown.
     pub ranges: UnsyncCallback<(), Ranges>,
+    /// Ranges read reactively by shared range linking.
+    pub tracked_ranges: UnsyncCallback<(), Ranges>,
     /// Show ranges changed by dragging, box selection or the wheel.
     pub on_update: UnsyncCallback<RangeUpdate>,
     /// Double click: return to the full view.
@@ -130,6 +132,7 @@ pub fn PlotSurface(
     let SurfaceInteraction {
         geometry,
         ranges,
+        tracked_ranges,
         on_update,
         on_reset,
         on_hover,
@@ -162,7 +165,7 @@ pub fn PlotSurface(
     };
     let links = use_local_context::<PlotLinks>();
     if let Some(links) = links {
-        links.bind(ranges, on_update);
+        links.bind(tracked_ranges, on_update);
     }
     let hover_callback = on_hover;
     let on_hover = hover::coalesced(UnsyncCallback::new(move |event: PlotHover| {
