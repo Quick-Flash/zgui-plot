@@ -47,7 +47,7 @@ pub fn PlotTabs(
             return;
         }
         last_click.set_value(None);
-        draft.set(title.run(id));
+        draft.set(reactive_graph::graph::untrack(|| title.run(id)));
         editing.set(Some(id));
     };
     let finish_rename = move |id| {

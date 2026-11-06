@@ -35,14 +35,14 @@ pub fn SplitDivider(
                                 style:width = move || Some(format!("{}px", current().map_or(0.0, |d| d.rect.width))),
                                 style:height = move || Some(format!("{}px", current().map_or(0.0, |d| d.rect.height))),
                                 on:key_down = move |ev| {
-                                    let Some(d) = current() else { return };
+                                    let Some(d) = divider.get_untracked() else { return };
                                     let Some((ratio, _)) = keyboard_weights(&ev.key, d.stacked, d.ratio, 1.0 - d.ratio) else { return };
                                     drag.set(None); layout.update(|tree| resize(tree, id, ratio, canvas_size.get_untracked()));
                                     ev.prevent_default(); ev.stop_propagation();
                                 },
                                 on:pointer_down = move |ev| {
                                     if ev.button != Some(zgui::vocab::PointerButton::Primary) { return; }
-                                    let Some(d) = current() else { return };
+                                    let Some(d) = divider.get_untracked() else { return };
                                     let start = if d.stacked { ev.position.y.0 } else { ev.position.x.0 };
                                     initial.set_value(Some(layout.get_untracked())); viewport.set_value(canvas_size.get_untracked());
                                     drag.set(Some((id, d.stacked, start, d.span, d.ratio))); ev.capture_pointer(); ev.stop_propagation();

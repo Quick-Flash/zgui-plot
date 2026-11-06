@@ -48,7 +48,11 @@ impl PlotPointer {
 
     /// Gesture of the drag in progress (reactive).
     pub fn active(&self) -> Option<Gesture> {
-        self.active.get()
+        if reactive_graph::graph::Observer::get().is_some() {
+            self.active.get()
+        } else {
+            self.active.get_untracked()
+        }
     }
 
     /// CSS cursor for the active drag, or else the hovered zone (reactive).
@@ -58,7 +62,11 @@ impl PlotPointer {
 
     /// Box being selected, in plot pixels (reactive).
     pub fn selection(&self) -> Option<SelectionBox> {
-        self.selection.get()
+        if reactive_graph::graph::Observer::get().is_some() {
+            self.selection.get()
+        } else {
+            self.selection.get_untracked()
+        }
     }
 
     /// Whether a drag is in progress, without subscribing.
