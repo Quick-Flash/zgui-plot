@@ -22,7 +22,7 @@ pub fn PlotTabs(
     #[prop(optional)]
     on_rename: Option<UnsyncCallback<(u64, String)>>,
 ) -> impl IntoView {
-    let last_click = StoredValue::new_local(None::<(u64, Instant, (f64, f64))>);
+    let last_click = StoredValue::new_local(None::<(u64, zgui::vocab::Timestamp, (f64, f64))>);
     let editing = RwSignal::new_local(None::<u64>);
     let draft = RwSignal::new_local(String::new());
     let rename_input = NodeRef::new();
@@ -227,10 +227,10 @@ pub fn PlotTabs(
                             select_plot(tab_id);
                             // Tab dragging owns pointer capture and suppresses framework activation,
                             // so its ordinary clicks must also recognize double-click here.
-                            let now = Instant::now();
+                            let now = ev.timestamp;
                             let position = (f64::from(ev.position.x.0), f64::from(ev.position.y.0));
                             let double = last_click.get_value().is_some_and(|(id, at, previous)| {
-                                id == tab_id && crate::interaction::is_double_click(now.saturating_duration_since(at), previous, position)
+                                id == tab_id && crate::interaction::is_double_click(now.saturating_since(at), previous, position)
                             });
                             last_click.set_value(if double { None } else { Some((tab_id, now, position)) });
                             if double { begin_rename(tab_id); }
